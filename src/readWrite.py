@@ -1,7 +1,4 @@
-import plotting
 import numpy as np
-import matplotlib.pyplot as plt
-import errno
 import sys
 import os
 
@@ -67,7 +64,7 @@ def loadData(outputFilename, frames=None, ycrop=None, xcrop=None, transpose=Fals
 
     Parameters
     ----------
-    filename : string
+    outputFilename : string
         The absolute or relative location of the particular hdf5 or
         tiff file to be read in. Filename must end in one of the following
         extensions ['tif', 'tiff', 'hdf5', 'h5', 'npy', 'lsm']. **If the file is
@@ -133,7 +130,9 @@ def loadData(outputFilename, frames=None, ycrop=None, xcrop=None, transpose=Fals
 
     print "-- Loading Data..."
 
+    print "outputFilename = ", outputFilename
     filename = outputFilename.rstrip('/')
+    print "filename = ", filename
     basePath, fName = os.path.split(filename)
     name, ext = os.path.splitext(fName)
 
@@ -251,99 +250,3 @@ def loadData(outputFilename, frames=None, ycrop=None, xcrop=None, transpose=Fals
     np.save(npFilenameBase, finalData)
 
     return finalData
-
-def writeVectorData(dst, xflow, yflow, data, dataThresh, vecThresh, title, downSample=1):
-
-    print "-- Writing Vector Data..."
-
-    s = downSample
-    u = np.zeros(xflow.shape); v = np.zeros((yflow.shape))
-    u[::s,::s] = xflow[::s,::s]; v[::s,::s] = yflow[::s,::s]
-    vecLen = np.sqrt(u*u + v*v)
-    u = np.ma.masked_where(np.logical_or(vecLen<=vecThresh, data<dataThresh), u)
-    v = np.ma.masked_where(np.logical_or(vecLen<=vecThresh, data<dataThresh), v)
-
-    fig = plt.figure()
-    plt.imshow(data, cmap='gray')
-    params = {'pivot':'middle', 'angles':'xy', 'scale_units':'xy', 'scale':0.3}
-    params['color'] = 'yellow'
-    params['width'] = 0.001; params['headwidth'] = 7; params['headlength'] = 7
-    plt.quiver(u, v, **params)
-    plt.title(title)
-    plt.tight_layout()
-    filename = "_".join(title.lower().split())
-    for ext in [".png"]:
-        path = os.path.join(dst, filename+ext)
-        plt.savefig(path, dpi=320)
-    plt.close()
-
-
-def saveFigs(dst, x, y, z, title, frameNum=None):
-
-    print "-- Saving Figures..."
-
-    fig = plt.figure()
-    cax = plt.imshow(np.flipud(z))
-    zxdim, zydim = z.shape
-    xlocs = np.arange(0,zxdim,zxdim/10); xlabels = x[:,0][xlocs]
-    ylocs = np.arange(0,zydim,zydim/10); ylabels = y[0][ylocs]
-    reversedYlabels = np.fliplr([ylabels])[0]
-    plt.xticks(xlocs, xlabels); plt.yticks(ylocs, reversedYlabels)
-    zmin = z.min(); zmax = z.max()
-    cbar = fig.colorbar(cax, ticks=[zmin, 0, zmax])
-    if frameNum is None:
-        title2d = "2D " + title
-    else:
-        title2d = "2D " + title + " Frame %d" % (frameNum)
-    plt.title(title2d)
-    filename = "_".join(title2d.lower().split())
-    for ext in [".png", ".pdf"]:
-        path = os.path.join(dst, filename+ext)
-        plt.savefig(path)
-    plt.close()
-
-    plotting.plotDiscreteSurface((x,y,z))
-    if frameNum is None:
-        title3d = "3D " + title
-    else:
-        title3d = "3D " + title + " Frame %d" % (frameNum)
-    plt.title(title3d)
-    filename = "_".join(title3d.lower().split())
-
-    for ext in [".png", ".pdf"]:
-        path = os.path.join(dst, filename+ext)
-        plt.savefig(path)
-    plt.close()
-
-def mkGif(data, outputFilename, begin=0, end=None, delay=25, **kwargs):
-
-    HARD_LIMIT = 500
-
-    filename = outputFilename.rstrip('/')
-    basePath, fName = os.path.split(filename)
-    name, ext = os.path.splitext(fName)
-    if basePath and not os.path.exists(basePath):
-        raise IOError, "Directory does not exist: %s" % (basePath)
-    if ext.lower() == '.gif':
-        for frameNum, frame in enumerate(data[begin:end]):
-            if frameNum > HARD_LIMIT:
-                print "HARD_LIMIT for frame numbers has been reached!"
-                break
-            if frameNum % 50 == 0:
-                print "Saving frame number %d..." % (frameNum)
-            plt.imshow(frame, **kwargs)
-            saveFile = os.path.join(basePath, "tmp%03d.png" % (frameNum))
-            try:
-                plt.savefig(saveFile)
-            except IOError:
-                raise IOError, "Error save temporary png file to: \"%s\"" % saveFile
-            plt.close()
-
-        convert = "convert -delay %d " % (delay)
-        tmpLoc = os.path.join(basePath, "tmp*")
-        convert = convert + tmpLoc + " " + outputFilename
-        os.system(convert)
-        os.system("rm " + tmpLoc) # remove the temporary images
-    else:
-        assert False, "File extension must be '.gif'"
-

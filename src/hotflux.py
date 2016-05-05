@@ -1,10 +1,7 @@
 import numpy as np
 import cv2
-import matplotlib.pyplot as plt
-import sys
-from scipy.io import savemat
 from scipy import interpolate
-import tools.readWrite as rw
+import readWrite as rw
 import sys, os
 
 
@@ -13,7 +10,9 @@ class HotFlux():
 
     def __init__(self, inFileName):
 
+        print "inFileName = ", inFileName
         self.dataPath = inFileName.rstrip('/')
+        print "self.dataPath = ", self.dataPath
         self.basePath, self.fullFilename = os.path.split(self.dataPath)
         self.filename, self.ext = os.path.splitext(self.fullFilename)
         self.filenameXflow = os.path.join(self.basePath, self.filename) + "_flowx.npy"
@@ -70,7 +69,7 @@ class HotFlux():
         # and keep everything in else after plugging into electron.
         if inKnots is None:
             # This is only temporary for testing flask
-            inKnots = np.loadtxt("./src/knotPoints.txt")
+            inKnots = np.loadtxt("/home/ndc08/code/projects/AstroflowApp/src/knotPoints.txt")
             if xtipsIn is None:
                 xtips = self.xflow[191:196]
             else:
@@ -317,7 +316,8 @@ class HotFlux():
         # and keep everything in else after plugging into electron.
         if inKnots is None:
             # This is only temporary for testing flask
-            knots = np.loadtxt("./src/knotPoints.txt")
+            print "Loading path from file..."
+            inKnots = np.loadtxt("/home/ndc08/code/projects/AstroflowApp/src/knotPoints.txt")
         else:
             knots = inKnots.copy()
         if calDataIn is None:
@@ -356,7 +356,7 @@ class HotFlux():
         #plt.imshow(ind)
         #plt.scatter(xm, ym, s=30, c='k')
         #plt.show(); sys.exit()
-        knots = self.formatKnots(inKnots)
+        knots = self.formatKnots(knots)
         width = float(width)
         knots = knots[::len(knots)/5.0]  # Downsample the number of knots
         numKnots = len(knots)
