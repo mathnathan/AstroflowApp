@@ -54,7 +54,7 @@ if __name__ == '__main__':
     if len(sys.argv) == 3:
         dataPath = sys.argv[2]
     else:
-        dataPath = "/home/ndc08/code/research/compneuro/max_planck_jupiter/nathans_project1/data/TSeries-06232015-1045__EpOri(12sec_2dir)_Site2_4Hz_0.75ISO_Astro3_AL/TSeries-06232015-1045__EpOri(12sec_2dir)_Site2_4Hz_0.75ISO_Astro3_AL.tif"
+        dataPath = "/home/ndc08/code/research/cil/maxPlanck/nathans_project1/data/TSeries-06232015-1045__EpOri(12sec_2dir)_Site2_4Hz_0.75ISO_Astro3_AL/TSeries-06232015-1045__EpOri(12sec_2dir)_Site2_4Hz_0.75ISO_Astro3_AL.tif"
     print "dataPath = ", dataPath
     analyzer = hf.HotFlux(dataPath)
     app.run(debug=True)
