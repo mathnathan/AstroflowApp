@@ -317,7 +317,7 @@ class HotFlux():
         if inKnots is None:
             # This is only temporary for testing flask
             print "Loading path from file..."
-            inKnots = np.loadtxt("/home/ndc08/code/projects/AstroflowApp/src/knotPoints.txt")
+            knots = np.loadtxt("/home/ndc08/code/projects/AstroflowApp/src/knotPoints.txt")
         else:
             knots = inKnots.copy()
         if calDataIn is None:
@@ -349,13 +349,6 @@ class HotFlux():
         #print "shape(np.average(calData, axis=0)) = ", ind.shape
         #print "xbar = ", xm
         #print "ybar = ", ym
-        #plt.figure()
-        #plt.imshow(np.average(calData, axis=0))
-        #plt.scatter(xm, ym, s=30, c='k')
-        #plt.figure()
-        #plt.imshow(ind)
-        #plt.scatter(xm, ym, s=30, c='k')
-        #plt.show(); sys.exit()
         knots = self.formatKnots(knots)
         width = float(width)
         knots = knots[::len(knots)/5.0]  # Downsample the number of knots
