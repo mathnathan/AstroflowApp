@@ -91,7 +91,7 @@ class HotFlux():
             else:
                 ytips = ytipsIn.copy()
 
-        zdim, ydim, xdim = xtips.shape
+        dzim, ydim, xdim = xtips.shape
         knots = self.formatKnots(inKnots)
         tck, u = interpolate.splprep([knots[:,0], knots[:,1]], s=0.0)
         samplePts = np.linspace(0,1,numPpts)
@@ -101,30 +101,28 @@ class HotFlux():
         numFrames = xtips.shape[0]
         fluxVtime = np.ndarray((numFrames, numPpts))
         for i, (xtip, ytip) in enumerate(zip(xtips, ytips)):  # For each frame
-
             for j,((x,y),(dx,dy)) in enumerate(zip(pts.T,derivs.T)):
-
 
                 # First find the vector from the flow field corresponding to this point
                 # Find the bounding x indices for the vector tip
                 #xindx = np.argmin(np.absolute(xRange-x))
                 nearestXVal = np.round(x)  #closest euclidean point
                 if nearestXVal > x or nearestXVal == xdim-1:
-                    x0 = nearestXVal - 1
-                    x1 = nearestXVal
+                    x0 = int(nearestXVal - 1)
+                    x1 = int(nearestXVal)
                 else:
-                    x0 = nearestXVal
-                    x1 = nearestXVal + 1
+                    x0 = int(nearestXVal)
+                    x1 = int(nearestXVal + 1)
                 #print "X values at (%f,%f) = (%f,%f)" % (x0indx,x1indx,x0,x1)
                 # Find the bounding y indices for the vector
                 #yindx = np.argmin(np.absolute(yRange-y))
                 nearestYVal = np.round(y)  # closest euclidean point
                 if nearestYVal > y or nearestYVal == ydim-1:
-                    y0 = nearestYVal - 1
-                    y1 = nearestYVal
+                    y0 = int(nearestYVal - 1)
+                    y1 = int(nearestYVal)
                 else:
-                    y0 = nearestYVal
-                    y1 = nearestYVal + 1
+                    y0 = int(nearestYVal)
+                    y1 = int(nearestYVal + 1)
 
                 # Now perform rectilinear interpolation to find best vector to
                 # take the inner product with

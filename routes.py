@@ -17,7 +17,7 @@ def about():
     return render_template('about.html')
 
 
-@app.route('/calcFlux', methods = ['POST'])
+@app.route('/calcFlux', methods=['POST'])
 def calcFlux():
     """
     This function expects the path to be passed as a JSON object
@@ -28,12 +28,12 @@ def calcFlux():
     print "\nIn calcFlux!!\n"
     jsonData = request.get_json()
     path = np.array(jsonData["path"])
-    #flux = analyzer.calcFluxLinear(path)
-    flux = analyzer.calcFluxLinear()
+    flux = analyzer.calcFluxLinear(path)
+    #flux = analyzer.calcFluxLinear()
     return json.jsonify({"flux": flux.tolist()})
 
 
-@app.route('/findHotspots', methods = ['POST'])
+@app.route('/findHotspots', methods=['POST'])
 def findHotspots():
     """
     This function expects the path to be passed as a JSON object
@@ -44,8 +44,8 @@ def findHotspots():
     print "\nIn findHotspots!!\n"
     jsonData = request.get_json()
     path = np.array(jsonData["path"])
-    #hotspots, flows = analyzer.findHotspots(path)
-    hotspots, flows = analyzer.findHotspots()
+    hotspots, flows = analyzer.findHotspots(path)
+    #hotspots, flows = analyzer.findHotspots()
     return json.jsonify({"hotspots": hotspots, "flows": flows.tolist()})
 
 if __name__ == '__main__':
@@ -54,7 +54,7 @@ if __name__ == '__main__':
     if len(sys.argv) == 3:
         dataPath = sys.argv[2]
     else:
-        dataPath = "/home/ndc08/code/research/cil/maxPlanck/nathans_project1/data/TSeries-06232015-1045__EpOri(12sec_2dir)_Site2_4Hz_0.75ISO_Astro3_AL/TSeries-06232015-1045__EpOri(12sec_2dir)_Site2_4Hz_0.75ISO_Astro3_AL.tif"
+        dataPath = "../../../../research/cil/maxPlanck/nathans_project1/data/TSeries-06232015-1045__EpOri(12sec_2dir)_Site2_4Hz_0.75ISO_Astro3_AL/TSeries-06232015-1045__EpOri(12sec_2dir)_Site2_4Hz_0.75ISO_Astro3_AL.tif"
     print "dataPath = ", dataPath
     analyzer = hf.HotFlux(dataPath)
     app.run(debug=True)
