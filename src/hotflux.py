@@ -10,9 +10,7 @@ class HotFlux():
 
     def __init__(self, inFileName):
 
-        print "inFileName = ", inFileName
         self.dataPath = inFileName.rstrip('/')
-        print "self.dataPath = ", self.dataPath
         self.basePath, self.fullFilename = os.path.split(self.dataPath)
         self.filename, self.ext = os.path.splitext(self.fullFilename)
         self.filenameXflow = os.path.join(self.basePath, self.filename) + "_flowx.npy"
@@ -63,33 +61,18 @@ class HotFlux():
         return (self.xflow, self.yflow)
 
 
-    def findHotspots(self, inKnots=None, xtipsIn=None, ytipsIn=None, numPpts=500):
+    def findHotspots(self, inKnots, xtipsIn=None, ytipsIn=None, numPpts=500):
 
-        # This is only temporary, remove this if statement
-        # and keep everything in else after plugging into electron.
-        if inKnots is None:
-            # This is only temporary for testing flask
-            inKnots = np.loadtxt("/home/ndc08/code/projects/AstroflowApp/src/knotPoints.txt")
-            if xtipsIn is None:
-                xtips = self.xflow[191:196]
-            else:
-                xtips = xtipsIn.copy()
-            if ytipsIn is None:
-                ytips = self.yflow[191:196]
-            else:
-                ytips = ytipsIn.copy()
+        if xtipsIn is None:
+            #xtips = self.xflow
+            xtips = self.xflow[191:196]
         else:
-            print "Knot points passed in!"
-            if xtipsIn is None:
-                #xtips = self.xflow
-                xtips = self.xflow[191:196]
-            else:
-                xtips = xtipsIn.copy()
-            if ytipsIn is None:
-                #ytips = self.yflow
-                ytips = self.yflow[191:196]
-            else:
-                ytips = ytipsIn.copy()
+            xtips = xtipsIn.copy()
+        if ytipsIn is None:
+            #ytips = self.yflow
+            ytips = self.yflow[191:196]
+        else:
+            ytips = ytipsIn.copy()
 
         dzim, ydim, xdim = xtips.shape
         knots = self.formatKnots(inKnots)
@@ -169,10 +152,13 @@ class HotFlux():
         return (hotspot_locs, fluxVtime)
 
 
-    def centroid(self, array=None):
+    def calcCentroid(self, array=None):
 
         if array is None:
-            avg = self.avgData.copy()
+            try:
+                return self.centroid
+            except:
+                avg = self.avgData.copy()
         else:
             avg = array.copy()
 
@@ -265,7 +251,7 @@ class HotFlux():
         else:
             assert False, "Incoming arrays must be 2 dimensional"
 
-    def calcFluxLinear(self, inKnots=None, calDataIn=None, xtailIn=None, ytailIn=None, xtipsIn=None, ytipsIn=None, width=10):
+    def calcFluxLinear(self, inKnots, calDataIn=None, xtailIn=None, ytailIn=None, xtipsIn=None, ytipsIn=None, width=10):
         """
         Calculate the flux of a path specified by knot points over a series of
         vector vields determined by xtips and ytips. For subpixel accuracy, the
@@ -310,24 +296,16 @@ class HotFlux():
             inKnots over the vector fields specified by xtips and ytips.
         """
 
-        # This is only temporary, remove this if statement
-        # and keep everything in else after plugging into electron.
-        if inKnots is None:
-            # This is only temporary for testing flask
-            print "Loading path from file..."
-            knots = np.loadtxt("/home/ndc08/code/projects/AstroflowApp/src/knotPoints.txt")
-        else:
-            knots = inKnots.copy()
         if calDataIn is None:
             calData = self.data
         else:
             calData = calDataIn.copy()
         if xtipsIn is None:
-            xtips = self.xflow[100:200]
+            xtips = self.xflow[191:196]
         else:
             xtips = xtipsIn.copy()
         if ytipsIn is None:
-            ytips = self.yflow[100:200]
+            ytips = self.yflow[191:196]
         else:
             ytips = ytipsIn.copy()
         if xtailIn is None:
@@ -343,11 +321,11 @@ class HotFlux():
 
         avgImg = self.avgData
         #avgImg[avgImg < np.percentile(avgImg, 60)] = 0
-        center = self.centroid(avgImg) # The centroid of the calcium image!
+        center = self.calcCentroid(avgImg) # The centroid of the calcium image!
         #print "shape(np.average(calData, axis=0)) = ", ind.shape
         #print "xbar = ", xm
         #print "ybar = ", ym
-        knots = self.formatKnots(knots)
+        knots = self.formatKnots(inKnots)
         width = float(width)
         knots = knots[::len(knots)/5.0]  # Downsample the number of knots
         numKnots = len(knots)
