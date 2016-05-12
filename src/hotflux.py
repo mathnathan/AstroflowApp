@@ -42,16 +42,21 @@ class HotFlux():
             self.xflow = np.zeros((zdim-1, ydim, xdim)) # Store the xflow vectors in here
             self.yflow = np.zeros((zdim-1, ydim, xdim)) # Store the yflow vectors in here
             prev = blurData[0]
+            pyr_scale = 0.5
+            levels = 5
+            winSz = 16
+            itrs = 5
+            polyN = 4
+            polyS = 0.8
+            flg = cv2.OPTFLOW_FARNEBACK_GAUSSIAN
+            optFlow = cv2.calcOpticalFlowFarneback
+            calcFlow = None
+            if int(cv2.__version__[0]) == 3:
+                calcFlow = lambda p, c: optFlow(p, c, None, pyr_scale, levels, winSz, itrs, polyN, polyS, flg)
+            else:
+                calcFlow = lambda p, c: optFlow(p, c, pyr_scale, levels, winSz, itrs, polyN, polyS, flg)
             for i,curr in enumerate(blurData[1:]):
-                optFlow = cv2.calcOpticalFlowFarneback
-                pyr_scale = 0.5
-                levels = 5
-                winSz = 16
-                itrs = 5
-                polyN = 4
-                polyS = 0.8
-                flg = cv2.OPTFLOW_FARNEBACK_GAUSSIAN
-                flow = optFlow(prev, curr, pyr_scale, levels, winSz, itrs, polyN, polyS, flg)
+                flow = calcFlow(prev, curr)
                 self.xflow[i] = flow[:,:,0]
                 self.yflow[i] = flow[:,:,1]
                 prev = curr
