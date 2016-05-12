@@ -327,7 +327,7 @@ class HotFlux():
         #print "ybar = ", ym
         knots = self.formatKnots(inKnots)
         width = float(width)
-        knots = knots[::len(knots)/5.0]  # Downsample the number of knots
+        knots = knots[::len(knots)/5]  # Downsample the number of knots
         numKnots = len(knots)
         # We want the slope to always be pointing toward the soma. This forms
         # the sign convention that positive flux is always inward or towards the
