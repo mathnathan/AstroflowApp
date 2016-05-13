@@ -7,14 +7,30 @@ import numpy as np
 app = Flask(__name__)
 
 
-@app.route('/')
-def home():
-    return render_template('home.html')
+#@app.route('/')
+#def home():
+#    return render_template('home.html')
 
 
-@app.route('/about')
-def about():
-    return render_template('about.html')
+#@app.route('/about')
+#def about():
+#    return render_template('about.html')
+
+@app.route('/getFlow', methods=['GET'])
+def getFlow():
+    frameNum = int(request.args.get('i'))
+    xflow = analyzer.xflow[frameNum]
+    yflow = analyzer.yflow[frameNum]
+    print "got flows at %d" % (frameNum)
+    return json.jsonify({ "xflow" : xflow.tolist(), "yflow" : yflow.tolist() })
+
+
+@app.route('/getFrame', methods=['GET'])
+def getFrame():
+    frameNum = int(request.args.get('i'))
+    frame = analyzer.data[frameNum]
+    print "got frame%d" % (frameNum)
+    return json.jsonify({ "frame%d"%(frameNum) : frame.tolist() })
 
 
 @app.route('/calcFlux', methods=['POST'])
@@ -22,7 +38,7 @@ def calcFlux():
     """
     This function expects the path to be passed as a JSON object
     in the following form
-    { path: [[xpt1, xpt2, ...], [ypt1, ypt2, ...]] }
+    { "path": [[xpt1, xpt2, ...], [ypt1, ypt2, ...]] }
     """
 
     print "\nIn calcFlux!!\n"
@@ -37,7 +53,7 @@ def findHotspots():
     """
     This function expects the path to be passed as a JSON object
     in the following form
-    { path: [[xpt1, xpt2, ...], [ypt1, ypt2, ...]] }
+    { "path": [[xpt1, xpt2, ...], [ypt1, ypt2, ...]] }
     """
 
     print "\nIn findHotspots!!\n"
