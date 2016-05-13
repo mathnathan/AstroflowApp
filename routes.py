@@ -16,6 +16,13 @@ app = Flask(__name__)
 #def about():
 #    return render_template('about.html')
 
+
+@app.route('/getMetadata', methods=['GET'])
+def getMetadata():
+    zdim, ydim, xdim = analyzer.data.shape
+    return json.jsonify({ "frames": zdim, "ydim": ydim, "xdim": xdim })
+
+
 @app.route('/getFlow', methods=['GET'])
 def getFlow():
     frameNum = int(request.args.get('i'))
@@ -30,7 +37,7 @@ def getFrame():
     frameNum = int(request.args.get('i'))
     frame = analyzer.data[frameNum]
     print "got frame%d" % (frameNum)
-    return json.jsonify({ "frame%d"%(frameNum) : frame.tolist() })
+    return json.jsonify({ "frame" : frame.tolist() })
 
 
 @app.route('/calcFlux', methods=['POST'])
