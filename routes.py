@@ -17,6 +17,20 @@ app = Flask(__name__)
 #    return render_template('about.html')
 
 
+@app.route('/suicide', methods=['POST'])
+def suicide():
+    import thread
+    thread.interrupt_main()  # Try this first. Should gracefully exist all threads
+    import os
+    os._exit()  # This is emergency backup. If above fails, hard exit the program
+
+
+@app.route('/getAverage', methods=['GET'])
+def getAverage():
+    avg = analyzer.avgData
+    return json.jsonify({ "average": avg.tolist() })
+
+
 @app.route('/getMetadata', methods=['GET'])
 def getMetadata():
     zdim, ydim, xdim = analyzer.data.shape
