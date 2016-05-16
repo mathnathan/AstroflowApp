@@ -266,6 +266,9 @@ class HotFlux():
     #----------------------------------------------------------------------
     def calcFluxLinearTEST(self, inKnots, calDataIn=None, xtailIn=None, ytailIn=None, xtipsIn=None, ytipsIn=None, width=1, beg=0, end=-1):
         print "enter calcFluxLinear"
+        #print type(inKnots)
+        #print len(inKnots); 
+        #print np.shape(inKnots); quit()
         """
         Calculate the flux of a path specified by knot points over a series of
         vector vields determined by xtips and ytips. For subpixel accuracy, the
@@ -340,13 +343,21 @@ class HotFlux():
         avgImg = self.avgData
         #avgImg[avgImg < np.percentile(avgImg, 60)] = 0
         center = self.calcCentroid(avgImg) # The centroid of the calcium image!
-        #print "shape(np.average(calData, axis=0)) = ", ind.shape
-        #print "xbar = ", xm
-        #print "ybar = ", ym
         knots = self.formatKnots(inKnots)
-        width = float(width)
-        knots = knots[::len(knots)/50]  # Downsample the number of knots
+        #print np.shape(knots); quit()
+        width = float(width) 
+        #print("width= ", width); quit() # 1
+
+        # leave knots as is. 
+        #knots = knots[::len(knots)/50]  # Downsample the number of knots
+
         numKnots = len(knots)
+
+        # knots have special significants. 
+        # Use an array of points, rather than knots
+        numPts = numKnots
+        pts    = knots   # (186, 2)
+
         # We want the slope to always be pointing toward the soma. This forms
         # the sign convention that positive flux is always inward or towards the
         # soma, and negative flux is always outward or away from the soma.
@@ -357,6 +368,7 @@ class HotFlux():
         # of the knots so that it was drawn inward! Easy fix
         if np.linalg.norm(center-knots[-1]) > np.linalg.norm(center-knots[0]): # Drawn outward
             knots = knots[::-1] # So we reverse the order. Now it is drawn inward
+
         assert self.verifyData(knots, xtail, ytail), "Interpolation knots must be contained within the vector field!"
         xRange = xtail[0] # Used for finding bounding indices around each point (bilinear interp)
         yRange = ytail[:,0] # Used for finding bounding indices around each point (bilinear interp)
@@ -367,7 +379,7 @@ class HotFlux():
         xvecs = []
         yvecs = []
 
-		# list of points
+        # list of points
 
         d = width/2.0 # integral for flux goes from -d to d
         ds = width/numSteps_ds # The stepsize for above integral
