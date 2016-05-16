@@ -66,16 +66,14 @@ class HotFlux():
         return (self.xflow, self.yflow)
 
 
-    def findHotspots(self, inKnots, xtipsIn=None, ytipsIn=None, numPpts=500):
+    def findHotspots(self, inKnots, xtipsIn=None, ytipsIn=None, numPpts=200, beg=0, end=-1):
 
         if xtipsIn is None:
-            #xtips = self.xflow
-            xtips = self.xflow[191:196]
+            xtips = self.xflow[beg:end]
         else:
             xtips = xtipsIn.copy()
         if ytipsIn is None:
-            #ytips = self.yflow
-            ytips = self.yflow[191:196]
+            ytips = self.yflow[beg:end]
         else:
             ytips = ytipsIn.copy()
 
@@ -88,8 +86,14 @@ class HotFlux():
         derivs /= np.sqrt((derivs*derivs).sum(axis=0))
         numFrames = xtips.shape[0]
         fluxVtime = np.ndarray((numFrames, numPpts))
-        for i, (xtip, ytip) in enumerate(zip(xtips, ytips)):  # For each frame
-            for j,((x,y),(dx,dy)) in enumerate(zip(pts.T,derivs.T)):
+        results = []
+        flowVecs = zip(xtips, ytips)
+        hotspots = []
+        for i,((x,y),(dx,dy)) in enumerate(zip(pts.T,derivs.T)):
+            results.append({'x': x, 'y': y, 'dx': dx, 'dy': dy,
+                            'xflow': [], 'yflow': [], 'flowVtime': [],
+                            'hotspots': []})
+            for j,(xtip, ytip) in enumerate(flowVecs):  # For each frame
 
                 # First find the vector from the flow field corresponding to this point
                 # Find the bounding x indices for the vector tip
@@ -137,24 +141,25 @@ class HotFlux():
 
                 xvec = self.bilinearInterp(xpts, ypts, zptsX, x, y)
                 yvec = self.bilinearInterp(xpts, ypts, zptsY, x, y)
-
+                results[i]['xflow'].append(xvec)
+                results[i]['yflow'].append(yvec)
                 slope = np.array((dx, dy)) # This is also the derivative
                 flow = np.array((xvec, yvec))
-                fluxVtime[i,j] = np.dot(flow,slope)
+                flowAlong = np.dot(flow, slope)
+                results[i]['flowVtime'].append(flowAlong)
+                fluxVtime[j,i] = flowAlong
 
-        hotspot_locs = []
         for i,flx in enumerate(fluxVtime):
-            print "Plot #%d" % (i)
+            #print "Plot #%d" % (i)
             zero_crossings = np.where(np.diff(np.signbit(flx)))[0]
-            print "Zero Crossing Indices"
-            print "\t", zero_crossings
-            print "Physical Coordinates"
+            #print "Zero Crossing Indices"
+            #print "\t", zero_crossings
+            #print "Physical Coordinates"
             for zero in zero_crossings:
-                print "\t%f -> (%f,%f)" % (zero, pts[0,zero], pts[1,zero])
-            hotspot_locs.append(np.array((pts[0,zero_crossings], pts[1, zero_crossings])).tolist())
+                results[zero]['hotspots'].append(i)
+                #print "\t%f -> (%f,%f)" % (zero, pts[0,zero], pts[1,zero])
 
-
-        return (hotspot_locs, fluxVtime)
+        return results
 
 
     def calcCentroid(self, array=None):
@@ -256,7 +261,7 @@ class HotFlux():
         else:
             assert False, "Incoming arrays must be 2 dimensional"
 
-    def calcFluxLinear(self, inKnots, calDataIn=None, xtailIn=None, ytailIn=None, xtipsIn=None, ytipsIn=None, width=10):
+    def calcFluxLinear(self, inKnots, calDataIn=None, xtailIn=None, ytailIn=None, xtipsIn=None, ytipsIn=None, width=1, beg=0, end=-1):
         """
         Calculate the flux of a path specified by knot points over a series of
         vector vields determined by xtips and ytips. For subpixel accuracy, the
@@ -293,6 +298,10 @@ class HotFlux():
             and each xtip
         width : scalar
             Approximate thickness of process in pixels. Assumed to be 10
+        beg : scalar
+            Beginning index to slice the time series for analysis
+        end : scalar
+            Ending index to slice the time series for analysis
 
         Returns
         -------
@@ -302,15 +311,15 @@ class HotFlux():
         """
 
         if calDataIn is None:
-            calData = self.data
+            calData = self.data[beg:end]
         else:
             calData = calDataIn.copy()
         if xtipsIn is None:
-            xtips = self.xflow[191:196]
+            xtips = self.xflow[beg:end]
         else:
             xtips = xtipsIn.copy()
         if ytipsIn is None:
-            ytips = self.yflow[191:196]
+            ytips = self.yflow[beg:end]
         else:
             ytips = ytipsIn.copy()
         if xtailIn is None:
@@ -332,7 +341,7 @@ class HotFlux():
         #print "ybar = ", ym
         knots = self.formatKnots(inKnots)
         width = float(width)
-        knots = knots[::len(knots)/5]  # Downsample the number of knots
+        knots = knots[::len(knots)/50]  # Downsample the number of knots
         numKnots = len(knots)
         # We want the slope to always be pointing toward the soma. This forms
         # the sign convention that positive flux is always inward or towards the
@@ -349,8 +358,10 @@ class HotFlux():
         yRange = ytail[:,0] # Used for finding bounding indices around each point (bilinear interp)
         ydim, xdim = xtail.shape # Used for finding bounding indices around each point (bilinear interp)
         numSteps_dt = 6.0 # Number of points for stepping between the knots points
-        numSteps_ds = 10.0 # Number of points for stepping along the line perpendicular to path
+        numSteps_ds = 5.0 # Number of points for stepping along the line perpendicular to path
         fluxPts = np.zeros(len(xtips))
+        xvecs = []
+        yvecs = []
         for i,(xtip,ytip) in enumerate(zip(xtips,ytips)):  # For each frame
             d = width/2.0 # integral for flux goes from -d to d
             ds = width/numSteps_ds # The stepsize for above integral
@@ -408,6 +419,8 @@ class HotFlux():
                         zptsY = ytip[y0indx:y1indx+1,x0indx:x1indx+1]
                         xvec = self.bilinearInterp((x0,x1), (y0,y1), zptsX, x, y)
                         yvec = self.bilinearInterp((x0,x1), (y0,y1), zptsY, x, y)
+                        xvecs.append(xvec)
+                        yvecs.append(yvec)
                         #print "\t\tFlow at this point = (%f,%f)" % (xvec,yvec)
                         flowNorm = np.sqrt(xvec*xvec+yvec*yvec)
                         #print "\t\t|Flow| at this point = %f" % flowNorm
@@ -415,9 +428,9 @@ class HotFlux():
                         calciumPts = calData[i,y0indx:y1indx+1,x0indx:x1indx+1]
                         calcium = self.bilinearInterp((x0,x1), (y0,y1), calciumPts, x, y)
                         #print "\t\tCalcium at this point = %f" % calcium
-                        prevFlux = flux
                         #print "\t\tPure Flux through this point = %f" % (np.dot(np.array((xvec,yvec)),slope/slopeNorm))
                         flux += calcium*np.dot(np.array((xvec,yvec)),slope/slopeNorm)
+                        #prevFlux = flux
                         #print "\t\tCalcium Adjusted Flux through this point = %f" % (flux-prevFlux)
                     #print "\tTotal Flux at this point = %f" % (flux*ds)
                     totFlux += flux*ds
@@ -427,11 +440,10 @@ class HotFlux():
             #print "numSteps_dt = ", numSteps_dt
             fluxPts[i] = totFlux/(numKnots*numSteps_dt) # store the average flux along the path
             #print "Average Flux along entire path = %f" % (fluxPts[i])
-        y,x = np.mgrid[0:len(xtips):1,0:numKnots*numSteps_dt:1]
-        #print "x.shape = ", x.shape
-        #print "y.shape = ", y.shape
+        derivs = np.diff(knots.T,1,1)
+        results = {'flux': fluxPts.tolist(), 'dx': derivs[0].tolist(), 'dy': derivs[1].tolist()}
 
-        return fluxPts
+        return results
 
     def calcPseudofluxLinear(self, inKnots, xtail, ytail, xtips, ytips):
         """

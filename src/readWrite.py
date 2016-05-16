@@ -218,7 +218,6 @@ def loadData(outputFilename, frames=None, ycrop=None, xcrop=None, transpose=Fals
         except IOError:
             raise IOError, "Error opening tiff file: \"%s\"" % (filename)
 
-        print "file opened!"
         for count,image in enumerate(tiff.iter_images()):
             image_shape = image.shape
 
@@ -226,7 +225,6 @@ def loadData(outputFilename, frames=None, ycrop=None, xcrop=None, transpose=Fals
 
         for count,image in enumerate(tiff.iter_images()):
             volumeData[count,:,:] = image
-        print "made it to here!"
 
     else:
         assert False, "The filename must have one of the following extensions [\"h5\", \"hdf5\", \"tif\", \"tiff\", \"npy\"]"

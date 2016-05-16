@@ -7,16 +7,6 @@ import numpy as np
 app = Flask(__name__)
 
 
-#@app.route('/')
-#def home():
-#    return render_template('home.html')
-
-
-#@app.route('/about')
-#def about():
-#    return render_template('about.html')
-
-
 @app.route('/suicide', methods=['POST'])
 def suicide():
     import thread
@@ -27,7 +17,11 @@ def suicide():
 
 @app.route('/getAverage', methods=['GET'])
 def getAverage():
-    avg = analyzer.avgData
+    start, stop = getBounds(request.args)
+    if start == 0 and stop == -1:
+        avg = analyzer.avgData
+    else:
+        avg = np.average(analyzer.data[start:stop], 0)
     return json.jsonify({ "average": avg.tolist() })
 
 
@@ -39,18 +33,25 @@ def getMetadata():
 
 @app.route('/getFlow', methods=['GET'])
 def getFlow():
-    frameNum = int(request.args.get('i'))
-    xflow = analyzer.xflow[frameNum]
-    yflow = analyzer.yflow[frameNum]
-    print "got flows at %d" % (frameNum)
+    if 'i' in request.args:
+        frameNum = int(request.args['i'])
+        xflow = analyzer.xflow[frameNum]
+        yflow = analyzer.yflow[frameNum]
+    else:
+        start, stop = getBounds(request.args)
+        xflow = analyzer.xflow[start:stop]
+        yflow = analyzer.yflow[start:stop]
     return json.jsonify({ "xflow" : xflow.tolist(), "yflow" : yflow.tolist() })
 
 
 @app.route('/getFrame', methods=['GET'])
 def getFrame():
-    frameNum = int(request.args.get('i'))
-    frame = analyzer.data[frameNum]
-    print "got frame%d" % (frameNum)
+    if 'i' in request.args:
+        frameNum = int(request.args['i'])
+        frame = analyzer.data[frameNum]
+    else:
+        start, stop = getBounds(request.args)
+        frame = analyzer.data[start:stop]
     return json.jsonify({ "frame" : frame.tolist() })
 
 
@@ -62,11 +63,16 @@ def calcFlux():
     { "path": [[xpt1, xpt2, ...], [ypt1, ypt2, ...]] }
     """
 
-    print "\nIn calcFlux!!\n"
     jsonData = request.get_json()
     path = np.array(jsonData["path"])
-    flux = analyzer.calcFluxLinear(path)
-    return json.jsonify({"flux": flux.tolist()})
+    if 'i' in jsonData:
+        start = jsonData['i']
+        stop = start + 1
+    else:
+        start, stop = getBounds(jsonData)
+
+    results = analyzer.calcFluxLinear(path, beg=start, end=stop)
+    return json.jsonify({"results": results})
 
 
 @app.route('/findHotspots', methods=['POST'])
@@ -77,11 +83,28 @@ def findHotspots():
     { "path": [[xpt1, xpt2, ...], [ypt1, ypt2, ...]] }
     """
 
-    print "\nIn findHotspots!!\n"
     jsonData = request.get_json()
     path = np.array(jsonData["path"])
-    hotspots, flows = analyzer.findHotspots(path)
-    return json.jsonify({"hotspots": hotspots, "flows": flows.tolist()})
+    if 'i' in jsonData:
+        start = jsonData['i']
+        stop = start + 1
+    else:
+        start, stop = getBounds(jsonData)
+
+    results = analyzer.findHotspots(path, beg=start, end=stop)
+    return json.jsonify({'results': results})
+
+def getBounds(request):
+    start = 0; stop = -1
+    if 'beg' in request:
+        start = int(request['beg'])
+        #assert start >= 0 and start < analyzer.data.shape[0]-1, "The starting index must be in [%d,%d]" % (0,analyzer.data.shape[0]-2)
+    if 'end' in request:
+        stop = int(request['end'])
+        #assert stop >= 1 and stop < analyzer.data.shape[0], "The ending index must be in [%d,%d]" % (1,analyzer.data.shape[0]-1)
+    #assert stop > start, "The ending index, %d, must be greater than the starting index, %d." % (stop, start)
+
+    return (start, stop)
 
 if __name__ == '__main__':
 
