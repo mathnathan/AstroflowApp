@@ -333,16 +333,14 @@ class HotFlux():
         else:
             ytail = ytailIn.copy()
 
+        dzim, ydim, xdim = xtips.shape
+        numFrames = xtips.shape[0]
+        numKnots = 1000 # Number of times to sample along the interpolant
+
         avgImg = self.avgData
-        #avgImg[avgImg < np.percentile(avgImg, 60)] = 0
         center = self.calcCentroid(avgImg) # The centroid of the calcium image!
-        #print "shape(np.average(calData, axis=0)) = ", ind.shape
-        #print "xbar = ", xm
-        #print "ybar = ", ym
         knots = self.formatKnots(inKnots)
         width = float(width)
-        knots = knots[::len(knots)/50]  # Downsample the number of knots
-        numKnots = len(knots)
         # We want the slope to always be pointing toward the soma. This forms
         # the sign convention that positive flux is always inward or towards the
         # soma, and negative flux is always outward or away from the soma.
@@ -354,10 +352,17 @@ class HotFlux():
         if np.linalg.norm(center-knots[-1]) > np.linalg.norm(center-knots[0]): # Drawn outward
             knots = knots[::-1] # So we reverse the order. Now it is drawn inward
         assert self.verifyData(knots, xtail, ytail), "Interpolation knots must be contained within the vector field!"
+
+        tck, u = interpolate.splprep([knots[:,0], knots[:,1]], s=0.0)
+        samplePts = np.linspace(0,1,numKnots)
+        dt = samplePts[1] - samplePts[0]
+        pts = np.array(interpolate.splev(samplePts, tck, der=0))
+        derivs = np.array(interpolate.splev(samplePts, tck, der=1))
+        derivs /= np.linalg.norm(derivs, axis=0) # Normalize the derivative
+
         xRange = xtail[0] # Used for finding bounding indices around each point (bilinear interp)
         yRange = ytail[:,0] # Used for finding bounding indices around each point (bilinear interp)
         ydim, xdim = xtail.shape # Used for finding bounding indices around each point (bilinear interp)
-        numSteps_dt = 6.0 # Number of points for stepping between the knots points
         numSteps_ds = 5.0 # Number of points for stepping along the line perpendicular to path
         fluxPts = np.zeros(len(xtips))
         xvecs = []
@@ -365,16 +370,15 @@ class HotFlux():
         for i,(xtip,ytip) in enumerate(zip(xtips,ytips)):  # For each frame
             d = width/2.0 # integral for flux goes from -d to d
             ds = width/numSteps_ds # The stepsize for above integral
-            dt = 1.0/numSteps_dt # stepsize for integral along path
-            pt0 = knots[0]
             totFlux = 0
-            for j,pt1 in enumerate(knots[1:]):  # For each knot point
+            for j, pt in enumerate((pts.T)):  # For each knot point
+                flux = 0
                 # Linearly interpolating between knot points. Therefore the gradient
                 # and slope will not change for the partitioning points along the
                 # way between knots
-                slope = pt1-pt0 # This is also the derivative
+                slope = derivs[:,j]
                 slopeNorm = np.linalg.norm(slope)
-                grad = np.array((-slope[1], slope[0]))/slopeNorm
+                grad = np.array((-slope[1], slope[0]))/slopeNorm # Doesn't matter which direction
                 #print "\n----------------------------------------"
                 #print "Knot# %d" % (j)
                 #print "(pt0,pt1) = ((%f,%f),(%f,%f))" % (pt0[0],pt0[1],pt1[0],pt1[1])
@@ -382,65 +386,60 @@ class HotFlux():
                 #print "|Tangent Vector| = %f" % (slopeNorm)
                 #print "Unit Gradient Vector = (%f,%f)" % (grad[0],grad[1])
                 #print "Inner Product between grad and tan vecs = %f" % (np.dot(slope,grad))
-                for k,t in enumerate(np.linspace(0,1,numSteps_dt)):  # For each subknot
-                    pt = pt0 + slope*t # Step along the line from pt0 to pt1
-                    flux = 0
-                    #print "\t----------------------------------------"
-                    #print "\t0 < t = %f < 1.0 | At step %d out of %d steps" % (t,k,numSteps_dt)
-                    #print "\tNext point on path = (%f,%f)" % (pt[0],pt[1])
-                    spts = np.arange(-d+ds/2.0,d,ds) # Quadrature points for the midpoint rule:
-                    for l,s in enumerate(spts): # For each point along perpendicular line
-                        #print "\t\t----------------------------------------"
-                        #print "\t\t-d = %f < s = %f < d = %f | At step %d out of %d steps. Stepsize = %f" % (-d,s,d,l,len(spts),ds)
-                        x, y = pt + grad*s
-                        #print "\t\tNext point tangential to path = (%f,%f)" % (x,y)
-                        # At this (x,y), find the bounding indices in xtail and ytail
-                        # First find the bounding x indices for the flow vector
-                        xindx = np.argmin(np.absolute(xRange-x))
-                        nearestXVal = xRange[xindx] # closest euclidean point
-                        if nearestXVal > x or xindx == xdim-1:
-                            x0indx = xindx-1; x0 = xRange[x0indx]
-                            x1indx = xindx; x1 = xRange[x1indx]
-                        elif nearestXVal <= x:
-                            x0indx = xindx; x0 = xRange[x0indx]
-                            x1indx = xindx+1; x1 = xRange[x1indx]
-                        # Then find the bounding y indices for the flow vector
-                        yindx = np.argmin(np.absolute(yRange-y))
-                        nearestYVal = yRange[yindx] # closest euclidean point
-                        if nearestYVal > y or yindx == ydim-1:
-                            y0indx = yindx-1; y0 = yRange[y0indx]
-                            y1indx = yindx; y1 = yRange[y1indx]
-                        elif nearestYVal <= y:
-                            y0indx = yindx; y0 = yRange[y0indx]
-                            y1indx = yindx+1; y1 = yRange[y1indx]
-                        # Now perform rectilinear interpolation to find best vector to
-                        # take the inner product with
-                        zptsX = xtip[y0indx:y1indx+1,x0indx:x1indx+1]
-                        zptsY = ytip[y0indx:y1indx+1,x0indx:x1indx+1]
-                        xvec = self.bilinearInterp((x0,x1), (y0,y1), zptsX, x, y)
-                        yvec = self.bilinearInterp((x0,x1), (y0,y1), zptsY, x, y)
-                        xvecs.append(xvec)
-                        yvecs.append(yvec)
-                        #print "\t\tFlow at this point = (%f,%f)" % (xvec,yvec)
-                        flowNorm = np.sqrt(xvec*xvec+yvec*yvec)
-                        #print "\t\t|Flow| at this point = %f" % flowNorm
-                        # Do the same with the calcium concentration
-                        calciumPts = calData[i,y0indx:y1indx+1,x0indx:x1indx+1]
-                        calcium = self.bilinearInterp((x0,x1), (y0,y1), calciumPts, x, y)
-                        #print "\t\tCalcium at this point = %f" % calcium
-                        #print "\t\tPure Flux through this point = %f" % (np.dot(np.array((xvec,yvec)),slope/slopeNorm))
-                        flux += calcium*np.dot(np.array((xvec,yvec)),slope/slopeNorm)
-                        #prevFlux = flux
-                        #print "\t\tCalcium Adjusted Flux through this point = %f" % (flux-prevFlux)
-                    #print "\tTotal Flux at this point = %f" % (flux*ds)
-                    totFlux += flux*ds
-                pt0 = pt1.copy()
+                #for k,t in enumerate(np.linspace(0,1,numSteps_dt)):  # For each subknot
+                #print "\t----------------------------------------"
+                #print "\t0 < t = %f < 1.0 | At step %d out of %d steps" % (t,k,numSteps_dt)
+                #print "\tNext point on path = (%f,%f)" % (pt[0],pt[1])
+                spts = np.arange(-d+ds/2.0,d,ds) # Quadrature points for the midpoint rule:
+                for l,s in enumerate(spts): # For each point along perpendicular line
+                    #print "\t\t---------------------------------------"
+                    #print "\t\t-d = %f < s = %f < d = %f | At step %d out of %d steps. Stepsize = %f" % (-d,s,d,l,len(spts),ds)
+                    x, y = pt + grad*s
+                    #print "\t\tNext point tangential to path = (%f,%f)" % (x,y)
+                    # At this (x,y), find the bounding indices in xtail and ytail
+                    # First find the bounding x indices for the flow vector
+                    xindx = np.argmin(np.absolute(xRange-x))
+                    nearestXVal = xRange[xindx] # closest euclidean point
+                    if nearestXVal > x or xindx == xdim-1:
+                        x0indx = xindx-1; x0 = xRange[x0indx]
+                        x1indx = xindx; x1 = xRange[x1indx]
+                    elif nearestXVal <= x:
+                        x0indx = xindx; x0 = xRange[x0indx]
+                        x1indx = xindx+1; x1 = xRange[x1indx]
+                    # Then find the bounding y indices for the flow vector
+                    yindx = np.argmin(np.absolute(yRange-y))
+                    nearestYVal = yRange[yindx] # closest euclidean point
+                    if nearestYVal > y or yindx == ydim-1:
+                        y0indx = yindx-1; y0 = yRange[y0indx]
+                        y1indx = yindx; y1 = yRange[y1indx]
+                    elif nearestYVal <= y:
+                        y0indx = yindx; y0 = yRange[y0indx]
+                        y1indx = yindx+1; y1 = yRange[y1indx]
+                    # Now perform rectilinear interpolation to find best vector to
+                    # take the inner product with
+                    zptsX = xtip[y0indx:y1indx+1,x0indx:x1indx+1]
+                    zptsY = ytip[y0indx:y1indx+1,x0indx:x1indx+1]
+                    xvec = self.bilinearInterp((x0,x1), (y0,y1), zptsX, x, y)
+                    yvec = self.bilinearInterp((x0,x1), (y0,y1), zptsY, x, y)
+                    xvecs.append(xvec)
+                    yvecs.append(yvec)
+                    #print "\t\tFlow at this point = (%f,%f)" % (xvec,yvec)
+                    flowNorm = np.sqrt(xvec*xvec+yvec*yvec)
+                    #print "\t\t|Flow| at this point = %f" % flowNorm
+                    # Do the same with the calcium concentration
+                    calciumPts = calData[i,y0indx:y1indx+1,x0indx:x1indx+1]
+                    calcium = self.bilinearInterp((x0,x1), (y0,y1), calciumPts, x, y)
+                    #print "\t\tCalcium at this point = %f" % calcium
+                    #print "\t\tPure Flux through this point = %f" % (np.dot(np.array((xvec,yvec)),slope/slopeNorm))
+                    flux += calcium*np.dot(np.array((xvec,yvec)),slope/slopeNorm)
+                    #prevFlux = flux
+                    #print "\t\tCalcium Adjusted Flux through this point = %f" % (flux-prevFlux)
+                #print "\tTotal Flux at this point = %f" % (flux*ds)
+                totFlux += flux*ds
             #print "Total Flux for entire path = %f" % (totFlux)
             #print "numKnots = ", numKnots
-            #print "numSteps_dt = ", numSteps_dt
-            fluxPts[i] = totFlux/(numKnots*numSteps_dt) # store the average flux along the path
+            fluxPts[i] = totFlux*dt # store the average flux along the path
             #print "Average Flux along entire path = %f" % (fluxPts[i])
-        derivs = np.diff(knots.T,1,1)
         results = {'flux': fluxPts.tolist(), 'dx': derivs[0].tolist(), 'dy': derivs[1].tolist()}
 
         return results
