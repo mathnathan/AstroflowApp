@@ -3,6 +3,7 @@ import cv2
 from scipy import interpolate
 import readWrite as rw
 import sys, os
+from tqdm import tqdm  # time loops
 
 
 class HotFlux():
@@ -261,7 +262,189 @@ class HotFlux():
         else:
             assert False, "Incoming arrays must be 2 dimensional"
 
+    #----------------------------------------------------------------------
+    #----------------------------------------------------------------------
+    def calcFluxLinearTEST(self, inKnots, calDataIn=None, xtailIn=None, ytailIn=None, xtipsIn=None, ytipsIn=None, width=1, beg=0, end=-1):
+        print "enter calcFluxLinear"
+        """
+        Calculate the flux of a path specified by knot points over a series of
+        vector vields determined by xtips and ytips. For subpixel accuracy, the
+        path will be linearly interpolated and each vector field will be
+        bilinearly interpolated.
+
+        Parameters
+        ----------
+        inKnots : array-like
+            This is the sequence of knot points used to create the piecewise linear interpolant.
+            It must be either a tuple, a list, or an ndarray and must be two dimensional of shape
+            (2,n) or (n,2) where each point is specified by (x,y).
+        calDataIn : array-like
+            The actual calcium intensity data. Should have shape (t,m,n) where t is the number of
+            time steps and m, n are the rows and columns respectively. The shape should match all
+            of the vector information as well.
+        xtailIn : ndarray
+            A 2 dimensional mesh specifying the x coordinates of the grid for each vector field.
+            This must match the shape of ytail and each xtip, ytip. In addition, the x coordinates
+            of the knots must be contained within the domain of xtail.
+        ytailIn : ndarray
+            A 2 dimensional mesh specifying the y coordinates of the grid for each vector field.
+            This must match the shape of xtail and each xtip, ytip. In addition, the y coordinates
+            of the knots must be contained within the domain of ytail.
+        xtipsIn : ndarray
+            Each element represents the x component of the vector associated with the corresponding
+            spatial (x,y) grid point found in xtail and ytail. Must be 3 dimensional where the first
+            dimension represents time and the remaining spatial dimensions must match xtail, ytail
+            and each ytip
+        ytipsIn : ndarray
+            Each element represents the y component of the vector associated with the corresponding
+            spatial (x,y) grid point found in xtail and ytail. Must be 3 dimensional where the first
+            dimension represents time and the remaining spatial dimensions must match xtail, ytail
+            and each xtip
+        width : scalar
+            Approximate thickness of process in pixels. Assumed to be 10
+        beg : scalar
+            Beginning index to slice the time series for analysis
+        end : scalar
+            Ending index to slice the time series for analysis
+
+        Returns
+        -------
+        flux : ndarray
+            A time series representing the associated flux along the path specified by
+            inKnots over the vector fields specified by xtips and ytips.
+        """
+
+        if calDataIn is None:
+            calData = self.data[beg:end]
+        else:
+            calData = calDataIn.copy()
+        if xtipsIn is None:
+            xtips = self.xflow[beg:end]
+        else:
+            xtips = xtipsIn.copy()
+        if ytipsIn is None:
+            ytips = self.yflow[beg:end]
+        else:
+            ytips = ytipsIn.copy()
+        if xtailIn is None:
+            zdim, ydim, xdim = self.shape
+            trash, xtail = np.mgrid[0:ydim, 0:xdim]
+        else:
+            xtail = xtailIn.copy()
+        if ytailIn is None:
+            zdim, ydim, xdim = self.shape
+            ytail, trash = np.mgrid[0:ydim, 0:xdim]
+        else:
+            ytail = ytailIn.copy()
+
+        avgImg = self.avgData
+        #avgImg[avgImg < np.percentile(avgImg, 60)] = 0
+        center = self.calcCentroid(avgImg) # The centroid of the calcium image!
+        #print "shape(np.average(calData, axis=0)) = ", ind.shape
+        #print "xbar = ", xm
+        #print "ybar = ", ym
+        knots = self.formatKnots(inKnots)
+        width = float(width)
+        knots = knots[::len(knots)/50]  # Downsample the number of knots
+        numKnots = len(knots)
+        # We want the slope to always be pointing toward the soma. This forms
+        # the sign convention that positive flux is always inward or towards the
+        # soma, and negative flux is always outward or away from the soma.
+        # We assume the path was drawn inward (clicked far from soma and dragged
+        # toward it). If this is the case then the slope is already toward the soma
+        # when calculating along the parameterization direction. Below we test if
+        # it was drawn outward. If it was drawn outward we just reverse the order
+        # of the knots so that it was drawn inward! Easy fix
+        if np.linalg.norm(center-knots[-1]) > np.linalg.norm(center-knots[0]): # Drawn outward
+            knots = knots[::-1] # So we reverse the order. Now it is drawn inward
+        assert self.verifyData(knots, xtail, ytail), "Interpolation knots must be contained within the vector field!"
+        xRange = xtail[0] # Used for finding bounding indices around each point (bilinear interp)
+        yRange = ytail[:,0] # Used for finding bounding indices around each point (bilinear interp)
+        ydim, xdim = xtail.shape # Used for finding bounding indices around each point (bilinear interp)
+        numSteps_dt = 6.0 # Number of points for stepping between the knots points
+        numSteps_ds = 5.0 # Number of points for stepping along the line perpendicular to path
+        fluxPts = np.zeros(len(xtips))
+        xvecs = []
+        yvecs = []
+
+		# list of points
+
+        d = width/2.0 # integral for flux goes from -d to d
+        ds = width/numSteps_ds # The stepsize for above integral
+        dt = 1.0/numSteps_dt # stepsize for integral along path
+
+        for i,(xtip,ytip) in tqdm(enumerate(zip(xtips,ytips))):  # For each frame
+            pt0 = knots[0]
+            totFlux = 0
+            for j,pt1 in tqdm(enumerate(knots[1:])):  # For each knot point
+                # Linearly interpolating between knot points. Therefore the gradient
+                # and slope will not change for the partitioning points along the
+                # way between knots
+                slope = pt1-pt0 # This is also the derivative
+                slopeNorm = np.linalg.norm(slope)
+                grad = np.array((-slope[1], slope[0]))/slopeNorm
+                for k,t in tqdm(enumerate(np.linspace(0,1,numSteps_dt))):  # For each subknot
+                    pt = pt0 + slope*t # Step along the line from pt0 to pt1
+                    flux = 0
+                    spts = np.arange(-d+ds/2.0,d,ds) # Quadrature points for the midpoint rule:
+                    for l,s in tqdm(enumerate(spts)): # For each point along perpendicular line
+                        x, y = pt + grad*s
+                        # At this (x,y), find the bounding indices in xtail and ytail
+                        # First find the bounding x indices for the flow vector
+                        xindx = np.argmin(np.absolute(xRange-x))
+                        nearestXVal = xRange[xindx] # closest euclidean point
+                        if nearestXVal > x or xindx == xdim-1:
+                            x0indx = xindx-1; x0 = xRange[x0indx]
+                            x1indx = xindx; x1 = xRange[x1indx]
+                        elif nearestXVal <= x:
+                            x0indx = xindx; x0 = xRange[x0indx]
+                            x1indx = xindx+1; x1 = xRange[x1indx]
+                        # Then find the bounding y indices for the flow vector
+                        yindx = np.argmin(np.absolute(yRange-y))
+                        nearestYVal = yRange[yindx] # closest euclidean point
+                        if nearestYVal > y or yindx == ydim-1:
+                            y0indx = yindx-1; y0 = yRange[y0indx]
+                            y1indx = yindx; y1 = yRange[y1indx]
+                        elif nearestYVal <= y:
+                            y0indx = yindx; y0 = yRange[y0indx]
+                            y1indx = yindx+1; y1 = yRange[y1indx]
+                        # Now perform rectilinear interpolation to find best vector to
+                        # take the inner product with
+                        zptsX = xtip[y0indx:y1indx+1,x0indx:x1indx+1]
+                        zptsY = ytip[y0indx:y1indx+1,x0indx:x1indx+1]
+                        xvec = self.bilinearInterp((x0,x1), (y0,y1), zptsX, x, y)
+                        yvec = self.bilinearInterp((x0,x1), (y0,y1), zptsY, x, y)
+                        xvecs.append(xvec)
+                        yvecs.append(yvec)
+                        #print "\t\tFlow at this point = (%f,%f)" % (xvec,yvec)
+                        flowNorm = np.sqrt(xvec*xvec+yvec*yvec)
+                        #print "\t\t|Flow| at this point = %f" % flowNorm
+                        # Do the same with the calcium concentration
+                        calciumPts = calData[i,y0indx:y1indx+1,x0indx:x1indx+1]
+                        calcium = self.bilinearInterp((x0,x1), (y0,y1), calciumPts, x, y)
+                        #print "\t\tCalcium at this point = %f" % calcium
+                        #print "\t\tPure Flux through this point = %f" % (np.dot(np.array((xvec,yvec)),slope/slopeNorm))
+                        flux += calcium*np.dot(np.array((xvec,yvec)),slope/slopeNorm)
+                        #prevFlux = flux
+                        #print "\t\tCalcium Adjusted Flux through this point = %f" % (flux-prevFlux)
+                    #print "\tTotal Flux at this point = %f" % (flux*ds)
+                    totFlux += flux*ds
+                pt0 = pt1.copy()
+            #print "Total Flux for entire path = %f" % (totFlux)
+            #print "numKnots = ", numKnots
+            #print "numSteps_dt = ", numSteps_dt
+            fluxPts[i] = totFlux/(numKnots*numSteps_dt) # store the average flux along the path
+            #print "Average Flux along entire path = %f" % (fluxPts[i])
+            #print "TEST: gordon, exit loop";  break
+        derivs = np.diff(knots.T,1,1)
+        results = {'flux': fluxPts.tolist(), 'dx': derivs[0].tolist(), 'dy': derivs[1].tolist()}
+
+        print "exit calcFluxLinear"
+        return results
+    #----------------------------------------------------------------------
+    #----------------------------------------------------------------------
     def calcFluxLinear(self, inKnots, calDataIn=None, xtailIn=None, ytailIn=None, xtipsIn=None, ytipsIn=None, width=1, beg=0, end=-1):
+        print "enter calcFluxLinear"
         """
         Calculate the flux of a path specified by knot points over a series of
         vector vields determined by xtips and ytips. For subpixel accuracy, the
@@ -443,7 +626,9 @@ class HotFlux():
         derivs = np.diff(knots.T,1,1)
         results = {'flux': fluxPts.tolist(), 'dx': derivs[0].tolist(), 'dy': derivs[1].tolist()}
 
+        print "exit calcFluxLinear"
         return results
+    #----------------------------------------------------------------------
 
     def calcPseudofluxLinear(self, inKnots, xtail, ytail, xtips, ytips):
         """
