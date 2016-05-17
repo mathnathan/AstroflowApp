@@ -152,6 +152,7 @@ class HotFlux():
                 flowAlong = np.dot(flow, slope)
                 results[i]['flowVtime'].append(flowAlong)
                 fluxVtime[j,i] = flowAlong
+                print "fluxVtime.shape = ", fluxVtime.shape
 
         for i,flx in enumerate(fluxVtime):
             #print "Plot #%d" % (i)
@@ -160,7 +161,7 @@ class HotFlux():
             #print "\t", zero_crossings
             #print "Physical Coordinates"
             for zero in zero_crossings:
-                results[zero]['hotspots'].append(i)
+                results[zero]['hotspots'].append(beg+i)
                 #print "\t%f -> (%f,%f)" % (zero, pts[0,zero], pts[1,zero])
 
         return results
@@ -592,7 +593,7 @@ class HotFlux():
         xRange = xtail[0] # Used for finding bounding indices around each point (bilinear interp)
         yRange = ytail[:,0] # Used for finding bounding indices around each point (bilinear interp)
         ydim, xdim = xtail.shape # Used for finding bounding indices around each point (bilinear interp)
-        numSteps_ds = 5.0 # Number of points for stepping along the line perpendicular to path
+        numSteps_ds = 5 # Number of points for stepping along the line perpendicular to path
         fluxPts = np.zeros(len(xtips))
         xvecs = []
         yvecs = []
