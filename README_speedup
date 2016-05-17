@@ -1,0 +1,8 @@
+May 17, 2016
+I will try to speedup Nathan's code, which is currently based on 4 for loops. 
+Working in branch "speedup". 
+
+git checkout -b speedup
+....
+git commit -a
+git push -u origin speedup
