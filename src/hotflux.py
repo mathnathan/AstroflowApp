@@ -3,6 +3,7 @@ import cv2
 from scipy import interpolate
 from scipy.interpolate import interp2d as interpolate2d
 from scipy.interpolate import RectBivariateSpline 
+from scipy.integrate import trapz, simps
 import readWrite as rw
 import sys, os
 from tqdm import tqdm  # time loops
@@ -408,6 +409,9 @@ class HotFlux():
 
         first_point = knots[0]
 
+        ###############################
+        # Start of Gordon's changes
+        ###############################
 
         # generate array of knot points
         # create of points at which the velocity is required. 
@@ -415,7 +419,6 @@ class HotFlux():
         d = width/2.0 # integral for flux goes from -d to d
         ds = width/numSteps_ds # The stepsize for above integral
         dt = 1.0/numSteps_dt # stepsize for integral along path
-        print "gradient= ", gradient
 
         all_knots = np.zeros([2*numSteps_ds+1, knots.shape[0], knots.shape[1]])
         transverse_range = range(-numSteps_ds, numSteps_ds+1)
@@ -425,19 +428,15 @@ class HotFlux():
             all_knots[ix] = knots + point
 
         all_velocities = np.zeros(all_knots.shape)
-        print "beg, end= ", beg, end
-        #print all_velocities.shape; quit()
-
-        # transpose vector all_knots
-        #all_knots_t = 
 
         all_knots_x = all_knots[:,:,0]
         all_knots_y = all_knots[:,:,1]
-
+        nb_knots = len(knots)
+        nb_frames = vx.shape[0]
 
         # Loop through all frames
-        for i in xrange(vx.shape[0]):
-            print "i= ", i
+        for i in xrange(nb_frames):
+            print "frame ", i
             cca, vvx, vvy = ca[i], vx[i], vy[i]
             vx_interp_func = RectBivariateSpline(y1d, x1d, vvx, kx=1, ky=1)  # 1D interpolation
             vy_interp_func = RectBivariateSpline(y1d, x1d, vvy, kx=1, ky=1)  # 1D interpolation
@@ -446,108 +445,40 @@ class HotFlux():
             vy_interp = vy_interp_func.ev(all_knots_x, all_knots_y)
             ca_interp = ca_interp_func.ev(all_knots_x, all_knots_y)
             
-            # for each point, compute the integrand f(knot), then integrate with scipy routine.
-            #'''
             #Given knots, compute interpolated velocity field
             total_flux = 0.
+
             # loop perpendicular to velocity field
             for jx,j in enumerate(transverse_range): 
                 calcium = ca_interp[jx]
                 line_knots = all_knots[jx]
                 velx = vx_interp[jx]
                 vely = vy_interp[jx]
+                vel2 = zip(velx, vely)
 
                 # I need tangent to line path. 
                 tangents = np.zeros([velx.shape[0], 2])
-                tangents[1:-1,:] = line_knots[2:]   - line_knots[0:-2]
-                tangents[0]      = - line_knots[1]  - line_knots[0]
-                tangents[-1]     = - line_knots[-1] - line_knots[-2]
+                tangents[1:-1,:] = line_knots[2:] - line_knots[0:-2]
+                tangents[0]      = line_knots[1]  - line_knots[0]
+                tangents[-1]     = line_knots[-1] - line_knots[-2]
 
                 # Normalize tangents
                 norms = np.linalg.norm(tangents, axis=1)
                 tangents = np.array([t/norms[i] for i,t in  enumerate(tangents)])
 
-                vel2 = zip(velx, vely)
-                integrands = [calcium[i]*np.dot(vel2[i], tangents[i]) for i in xrange(len(velx))]
+                # Nathan: check the formula
+                integrands = [calcium[i]*np.dot(vel2[i], tangents[i]) for i in xrange(nb_knots)]
+                total_flux += np.trapz(integrands, dx=dt) * ds
 
-				# Must still compute the integral based on the integrands. Using Simpson? Use scipy routine. 
 
+            fluxPts[i] = total_flux/(nb_knots * numSteps_dt) # store the average flux along the path
 
-                    #totFlux += flux*ds
-            #fluxPts[i] = totFlux/(numKnots*numSteps_dt) # store the average flux along the path
+        ###############################
+        # End of Gordon's changes
+        ###############################
         quit()
 
-        # Integrate the flow along the knots
-        quit()
-
-        print all_velocities.shape; quit()
-
-        # interpolate velocity field
-
-
-        for i,(xtip,ytip) in tqdm(enumerate(zip(xtips,ytips))):  # For each frame
-            pt0 = knots[0]
-            totFlux = 0
-            for j,pt1 in tqdm(enumerate(knots[1:])):  # For each knot point
-                # Linearly interpolating between knot points. Therefore the gradient
-                # and slope will not change for the partitioning points along the
-                # way between knots
-                slope = pt1-pt0 # This is also the derivative
-                slopeNorm = np.linalg.norm(slope)
-                grad = np.array((-slope[1], slope[0]))/slopeNorm
-                for k,t in tqdm(enumerate(np.linspace(0,1,numSteps_dt))):  # For each subknot
-                    pt = pt0 + slope*t # Step along the line from pt0 to pt1
-                    flux = 0
-                    spts = np.arange(-d+ds/2.0,d,ds) # Quadrature points for the midpoint rule:
-                    for l,s in tqdm(enumerate(spts)): # For each point along perpendicular line
-                        x, y = pt + grad*s
-                        # At this (x,y), find the bounding indices in xtail and ytail
-                        # First find the bounding x indices for the flow vector
-                        xindx = np.argmin(np.absolute(xRange-x))
-                        nearestXVal = xRange[xindx] # closest euclidean point
-                        if nearestXVal > x or xindx == xdim-1:
-                            x0indx = xindx-1; x0 = xRange[x0indx]
-                            x1indx = xindx; x1 = xRange[x1indx]
-                        elif nearestXVal <= x:
-                            x0indx = xindx; x0 = xRange[x0indx]
-                            x1indx = xindx+1; x1 = xRange[x1indx]
-                        # Then find the bounding y indices for the flow vector
-                        yindx = np.argmin(np.absolute(yRange-y))
-                        nearestYVal = yRange[yindx] # closest euclidean point
-                        if nearestYVal > y or yindx == ydim-1:
-                            y0indx = yindx-1; y0 = yRange[y0indx]
-                            y1indx = yindx; y1 = yRange[y1indx]
-                        elif nearestYVal <= y:
-                            y0indx = yindx; y0 = yRange[y0indx]
-                            y1indx = yindx+1; y1 = yRange[y1indx]
-                        # Now perform rectilinear interpolation to find best vector to
-                        # take the inner product with
-                        zptsX = xtip[y0indx:y1indx+1,x0indx:x1indx+1]
-                        zptsY = ytip[y0indx:y1indx+1,x0indx:x1indx+1]
-                        xvec = self.bilinearInterp((x0,x1), (y0,y1), zptsX, x, y)
-                        yvec = self.bilinearInterp((x0,x1), (y0,y1), zptsY, x, y)
-                        xvecs.append(xvec)
-                        yvecs.append(yvec)
-                        #print "\t\tFlow at this point = (%f,%f)" % (xvec,yvec)
-                        flowNorm = np.sqrt(xvec*xvec+yvec*yvec)
-                        #print "\t\t|Flow| at this point = %f" % flowNorm
-                        # Do the same with the calcium concentration
-                        calciumPts = calData[i,y0indx:y1indx+1,x0indx:x1indx+1]
-                        calcium = self.bilinearInterp((x0,x1), (y0,y1), calciumPts, x, y)
-                        #print "\t\tCalcium at this point = %f" % calcium
-                        #print "\t\tPure Flux through this point = %f" % (np.dot(np.array((xvec,yvec)),slope/slopeNorm))
-                        flux += calcium*np.dot(np.array((xvec,yvec)),slope/slopeNorm)
-                        #prevFlux = flux
-                        #print "\t\tCalcium Adjusted Flux through this point = %f" % (flux-prevFlux)
-                    #print "\tTotal Flux at this point = %f" % (flux*ds)
-                    totFlux += flux*ds
-                pt0 = pt1.copy()
-            #print "Total Flux for entire path = %f" % (totFlux)
-            #print "numKnots = ", numKnots
-            #print "numSteps_dt = ", numSteps_dt
-            fluxPts[i] = totFlux/(numKnots*numSteps_dt) # store the average flux along the path
-            #print "Average Flux along entire path = %f" % (fluxPts[i])
-            #print "TEST: gordon, exit loop";  break
+        # Nathan: fix the remainder
         derivs = np.diff(knots.T,1,1)
         results = {'flux': fluxPts.tolist(), 'dx': derivs[0].tolist(), 'dy': derivs[1].tolist()}
 
