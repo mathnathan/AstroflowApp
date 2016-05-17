@@ -352,8 +352,6 @@ class HotFlux():
         avgImg = self.avgData
         center = self.calcCentroid(avgImg) # The centroid of the calcium image!
         knots = self.formatKnots(inKnots)
-<<<<<<< HEAD
-=======
         #print np.shape(knots); quit()
         width = float(width) 
         #print("width= ", width); quit() # 1
@@ -571,7 +569,6 @@ class HotFlux():
         avgImg = self.avgData
         center = self.calcCentroid(avgImg) # The centroid of the calcium image!
         knots = self.formatKnots(inKnots)
->>>>>>> speedup
         width = float(width)
         # We want the slope to always be pointing toward the soma. This forms
         # the sign convention that positive flux is always inward or towards the
