@@ -446,20 +446,31 @@ class HotFlux():
             vy_interp = vy_interp_func.ev(all_knots_x, all_knots_y)
             ca_interp = ca_interp_func.ev(all_knots_x, all_knots_y)
             
-            '''
+            # for each point, compute the integrand f(knot), then integrate with scipy routine.
+            #'''
             #Given knots, compute interpolated velocity field
             total_flux = 0.
             # loop perpendicular to velocity field
             for jx,j in enumerate(transverse_range): 
-                flux = 0.
-                nb_knots = knots.shape[0]
-                for kx,k in enumerate(xrange(nb_knots)):
-                    #calciumPts = calData[i,y0indx:y1indx+1,x0indx:x1indx+1]
-                    #calcium = self.bilinearInterp((x0,x1), (y0,y1), calciumPts, x, y)
-                    #flux += calcium*np.dot(np.array((xvec,yvec)),slope/slopeNorm)
-                    pass
-            '''
+                calcium = ca_interp[jx]
+                line_knots = all_knots[jx]
+                velx = vx_interp[jx]
+                vely = vy_interp[jx]
 
+                # I need tangent to line path. 
+                tangents = np.zeros([velx.shape[0], 2])
+                tangents[1:-1,:] = line_knots[2:]   - line_knots[0:-2]
+                tangents[0]      = - line_knots[1]  - line_knots[0]
+                tangents[-1]     = - line_knots[-1] - line_knots[-2]
+
+                # Normalize tangents
+                norms = np.linalg.norm(tangents, axis=1)
+                tangents = np.array([t/norms[i] for i,t in  enumerate(tangents)])
+
+                vel2 = zip(velx, vely)
+                integrands = [calcium[i]*np.dot(vel2[i], tangents[i]) for i in xrange(len(velx))]
+
+				# Must still compute the integral based on the integrands. Using Simpson? Use scipy routine. 
 
 
                     #totFlux += flux*ds
