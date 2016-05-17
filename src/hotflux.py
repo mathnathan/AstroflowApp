@@ -269,12 +269,6 @@ class HotFlux():
     #----------------------------------------------------------------------
     #----------------------------------------------------------------------
     def calcFluxLinearTEST(self, inKnots, calDataIn=None, xtailIn=None, ytailIn=None, xtipsIn=None, ytipsIn=None, width=1, beg=0, end=-1):
-        print "enter calcFluxLinear"
-        #print type(inKnots)
-        #print len(inKnots); 
-        #print np.shape(inKnots); quit()
-        #print type(xtailIn)
-        #print np.shape(xtailIn); quit()
         """
         Calculate the flux of a path specified by knot points over a series of
         vector vields determined by xtips and ytips. For subpixel accuracy, the
@@ -353,9 +347,7 @@ class HotFlux():
         avgImg = self.avgData
         center = self.calcCentroid(avgImg) # The centroid of the calcium image!
         knots = self.formatKnots(inKnots)
-        #print np.shape(knots); quit()
         width = float(width) 
-        #print("width= ", width); quit() # 1
 
         # leave knots as is. 
         #knots = knots[::len(knots)/50]  # Downsample the number of knots
@@ -468,13 +460,18 @@ class HotFlux():
 
                 # Normalize tangents
                 norms = np.linalg.norm(tangents, axis=1)
-                tangents = np.array([t/norms[i] for i,t in  enumerate(tangents)])
+                tangents = np.array([t/norms[ii] for ii,t in  enumerate(tangents)])
 
                 # Nathan: check the formula
-                integrands = [calcium[i]*np.dot(vel2[i], tangents[i]) for i in xrange(nb_knots)]
+                integrands = [calcium[ii]*np.dot(vel2[i], tangents[ii]) for ii in xrange(nb_knots)]
                 total_flux += np.trapz(integrands, dx=dt) * ds
+                print "total_flux= ", total_flux
 
 
+            print "i= ", i
+            print np.shape(fluxPts)
+            fluxPts[i] = 3.0
+            quit()
             fluxPts[i] = total_flux/(nb_knots * numSteps_dt) # store the average flux along the path
 
         ###############################
