@@ -463,15 +463,10 @@ class HotFlux():
                 tangents = np.array([t/norms[ii] for ii,t in  enumerate(tangents)])
 
                 # Nathan: check the formula
-                integrands = [calcium[ii]*np.dot(vel2[i], tangents[ii]) for ii in xrange(nb_knots)]
+                integrands = [calcium[ii]*np.dot(vel2[ii], tangents[ii]) for ii in xrange(nb_knots)]
                 total_flux += np.trapz(integrands, dx=dt) * ds
-                print "total_flux= ", total_flux
 
 
-            print "i= ", i
-            print np.shape(fluxPts)
-            fluxPts[i] = 3.0
-            quit()
             fluxPts[i] = total_flux/(nb_knots * numSteps_dt) # store the average flux along the path
 
         ###############################
