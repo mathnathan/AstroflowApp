@@ -33,7 +33,7 @@ derivs = np.array(interpolate.splev(sampleParams, tck, der=1))
 print derivs
 normDerivs = derivs / np.linalg.norm(derivs, axis=0) # Normalize the derivative
 
-plt.plot(samplePts[0], derivs[1], color='r', label='deriv')
+plt.plot(samplePts[0], derivs[1]/derivs[0], color='r', label='deriv')
 #plt.plot(samplePts[0], normDerivs[1], color='g', label='norm deriv')
 plt.legend()
 plt.show()
