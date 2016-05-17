@@ -380,7 +380,7 @@ class HotFlux():
         xvecs = []
         yvecs = []
 
-        # Rename point and velocity arrays
+        # Rename point and velocity asrrays
         # 2D points
         x, y = xtail, ytail
         #print x[0,:]
@@ -405,6 +405,16 @@ class HotFlux():
 
         first_point = knots[0]
 
+        # DEBUGGING
+        # Create a dataset with vx,vy = (1,0)
+        # Knots all pointed in the x direction
+        debug = True
+        if debug:
+            vx[:] = 0
+            vy[:] = 1
+            ca[:] = 1
+            knots = np.array([(0,y*.1) for y in range(30)])
+
         ###############################
         # Start of Gordon's changes
         ###############################
@@ -423,17 +433,17 @@ class HotFlux():
             point = i * ds * gradient
             all_knots[ix] = knots + point
 
-        all_velocities = np.zeros(all_knots.shape)
-
         all_knots_x = all_knots[:,:,0]
         all_knots_y = all_knots[:,:,1]
         nb_knots = len(knots)
         nb_frames = vx.shape[0]
 
+
         # Loop through all frames
-        for i in xrange(nb_frames):
-            print "frame ", i
-            cca, vvx, vvy = ca[i], vx[i], vy[i]
+        for iframe in xrange(nb_frames):
+            print "frame ", iframe
+            cca, vvx, vvy = ca[iframe], vx[iframe], vy[iframe]
+
             vx_interp_func = RectBivariateSpline(y1d, x1d, vvx, kx=1, ky=1)  # 1D interpolation
             vy_interp_func = RectBivariateSpline(y1d, x1d, vvy, kx=1, ky=1)  # 1D interpolation
             ca_interp_func = RectBivariateSpline(y1d, x1d, cca, kx=1, ky=1)  # 1D interpolation
@@ -467,12 +477,11 @@ class HotFlux():
                 total_flux += np.trapz(integrands, dx=dt) * ds
 
 
-            fluxPts[i] = total_flux/(nb_knots * numSteps_dt) # store the average flux along the path
+            fluxPts[iframe] = total_flux/(nb_knots * numSteps_dt) # store the average flux along the path
 
         ###############################
         # End of Gordon's changes
         ###############################
-        quit()
 
         # Nathan: fix the remainder
         derivs = np.diff(knots.T,1,1)
