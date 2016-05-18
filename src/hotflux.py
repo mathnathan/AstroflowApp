@@ -2,7 +2,7 @@ import numpy as np
 import cv2
 from scipy import interpolate
 from scipy.interpolate import interp2d as interpolate2d
-from scipy.interpolate import RectBivariateSpline 
+from scipy.interpolate import RectBivariateSpline
 from scipy.integrate import trapz, simps
 import readWrite as rw
 import sys, os
@@ -152,9 +152,12 @@ class HotFlux():
                 flowAlong = np.dot(flow, slope)
                 results[i]['flowVtime'].append(flowAlong)
                 fluxVtime[j,i] = flowAlong
-                print "fluxVtime.shape = ", fluxVtime.shape
 
+
+        import matplotlib.pyplot as plt
+        plt.plot(np.arange(200),[0]*200,color='k')
         for i,flx in enumerate(fluxVtime):
+            plt.plot(flx, label="%d" % (beg+i))
             #print "Plot #%d" % (i)
             zero_crossings = np.where(np.diff(np.signbit(flx)))[0]
             #print "Zero Crossing Indices"
@@ -163,6 +166,9 @@ class HotFlux():
             for zero in zero_crossings:
                 results[zero]['hotspots'].append(beg+i)
                 #print "\t%f -> (%f,%f)" % (zero, pts[0,zero], pts[1,zero])
+
+        plt.legend()
+        plt.show()
 
         return results
 
@@ -347,14 +353,14 @@ class HotFlux():
         avgImg = self.avgData
         center = self.calcCentroid(avgImg) # The centroid of the calcium image!
         knots = self.formatKnots(inKnots)
-        width = float(width) 
+        width = float(width)
 
-        # leave knots as is. 
+        # leave knots as is.
         #knots = knots[::len(knots)/50]  # Downsample the number of knots
 
         numKnots = len(knots)
 
-        # knots have special significants. 
+        # knots have special significants.
         # Use an array of points, rather than knots
         numPts = numKnots
         pts    = knots   # (186, 2)
@@ -420,7 +426,7 @@ class HotFlux():
         ###############################
 
         # generate array of knot points
-        # create of points at which the velocity is required. 
+        # create of points at which the velocity is required.
 
         d = width/2.0 # integral for flux goes from -d to d
         ds = width/numSteps_ds # The stepsize for above integral
@@ -450,19 +456,19 @@ class HotFlux():
             vx_interp = vx_interp_func.ev(all_knots_x, all_knots_y)
             vy_interp = vy_interp_func.ev(all_knots_x, all_knots_y)
             ca_interp = ca_interp_func.ev(all_knots_x, all_knots_y)
-            
+
             #Given knots, compute interpolated velocity field
             total_flux = 0.
 
             # loop perpendicular to velocity field
-            for jx,j in enumerate(transverse_range): 
+            for jx,j in enumerate(transverse_range):
                 calcium = ca_interp[jx]
                 line_knots = all_knots[jx]
                 velx = vx_interp[jx]
                 vely = vy_interp[jx]
                 vel2 = zip(velx, vely)
 
-                # I need tangent to line path. 
+                # I need tangent to line path.
                 tangents = np.zeros([velx.shape[0], 2])
                 tangents[1:-1,:] = line_knots[2:] - line_knots[0:-2]
                 tangents[0]      = line_knots[1]  - line_knots[0]
