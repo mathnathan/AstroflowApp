@@ -2,7 +2,7 @@ import numpy as np
 from scipy import interpolate
 import matplotlib.pyplot as plt
 
-numKnots = 12
+numKnots = 186
 numSamples = 1000
 
 xpts = np.linspace(0,2*np.pi,numKnots)
@@ -31,7 +31,7 @@ plt.scatter(xpts, exact_deriv, color='black', label='exact deriv')
 
 derivs = np.array(interpolate.splev(sampleParams, tck, der=1))
 print derivs
-normDerivs = derivs / np.linalg.norm(derivs, axis=0) # Normalize the derivative
+#normDerivs = derivs / np.linalg.norm(derivs, axis=0) # Normalize the derivative
 
 plt.plot(samplePts[0], derivs[1]/derivs[0], color='r', label='deriv')
 #plt.plot(samplePts[0], normDerivs[1], color='g', label='norm deriv')

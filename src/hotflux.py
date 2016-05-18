@@ -4,6 +4,7 @@ from scipy import interpolate
 from scipy.interpolate import interp2d as interpolate2d
 from scipy.interpolate import RectBivariateSpline
 from scipy.integrate import trapz, simps
+from scipy.ndimage.filters import gaussian_filter as gauss
 import readWrite as rw
 import sys, os
 from tqdm import tqdm  # time loops
@@ -40,8 +41,8 @@ class HotFlux():
             self.yflow = np.load(self.filenameYflow)
         else:  # Now calculate flow
             zdim, ydim, xdim = self.data.shape
-            #blurData = gauss(self.data, (0.9,0.65,0.65))
-            blurData = self.data  # No blur for now...
+            blurData = gauss(self.data, (0.5,0.35,0.35))
+            #blurData = self.data  # No blur for now...
 
             self.xflow = np.zeros((zdim-1, ydim, xdim)) # Store the xflow vectors in here
             self.yflow = np.zeros((zdim-1, ydim, xdim)) # Store the yflow vectors in here
@@ -70,7 +71,7 @@ class HotFlux():
         return (self.xflow, self.yflow)
 
 
-    def findHotspots(self, inKnots, xtipsIn=None, ytipsIn=None, numPpts=200, beg=0, end=-1):
+    def findHotspots(self, inKnots, xtipsIn=None, ytipsIn=None, numPpts=500, beg=0, end=-1):
 
         if xtipsIn is None:
             xtips = self.xflow[beg:end]
@@ -82,21 +83,29 @@ class HotFlux():
             ytips = ytipsIn.copy()
 
         dzim, ydim, xdim = xtips.shape
+        #y, x = np.mgrid[0:ydim, 0:xdim]
         knots = self.formatKnots(inKnots)
         tck, u = interpolate.splprep([knots[:,0], knots[:,1]], s=0.0)
         samplePts = np.linspace(0,1,numPpts)
         pts = np.array(interpolate.splev(samplePts, tck, der=0))
         derivs = np.array(interpolate.splev(samplePts, tck, der=1))
         derivs /= np.sqrt((derivs*derivs).sum(axis=0))
+
         numFrames = xtips.shape[0]
         fluxVtime = np.ndarray((numFrames, numPpts))
         results = []
         flowVecs = zip(xtips, ytips)
         hotspots = []
+
+        xvecs = []; yvecs = []
+        xderiv = []; yderiv = []
         for i,((x,y),(dx,dy)) in enumerate(zip(pts.T,derivs.T)):
+            xvecs.append([]), yvecs.append([]);
             results.append({'x': x, 'y': y, 'dx': dx, 'dy': dy,
                             'xflow': [], 'yflow': [], 'flowVtime': [],
                             'hotspots': []})
+            xderiv.append(dx)
+            yderiv.append(dy)
             for j,(xtip, ytip) in enumerate(flowVecs):  # For each frame
 
                 # First find the vector from the flow field corresponding to this point
@@ -125,7 +134,7 @@ class HotFlux():
                 xpts = (x0,x1)
                 ypts = (y0,y1)
 
-                if 1:
+                if 0:
                     # AVERAGING THE VECTORS BEFORE BILINEAR INTERPOLATION TO
                     # IMPROVE RESULTS (Hopefully)
                     zptsX0 = xtip[y0-1:y1+1,x0-1:x1+1].mean()
@@ -143,8 +152,23 @@ class HotFlux():
                     zptsX = xtip[y0:y1+1,x0:x1+1]
                     zptsY = ytip[y0:y1+1,x0:x1+1]
 
+                #print "Bilinear Interp"
+                #for i in tqdm(range(1)):
                 xvec = self.bilinearInterp(xpts, ypts, zptsX, x, y)
+                #print "\txvec1 = ", xvec
+
+                #x1d = np.arange(xtips.shape[2])
+                #y1d = np.arange(xtips.shape[1])
+                #print "RectBivariate"
+                #for i in tqdm(range(1)):
+                #    xvecFunc = RectBivariateSpline(y1d, x1d, xtip, kx=1, ky=1)  # 1D interpolation
+                #    xvec2 = xvecFunc.ev([y], [x])
+                #print "\txvec2 = ", xvec2
+                #sys.exit()
+
+                xvecs[i].append(xvec)
                 yvec = self.bilinearInterp(xpts, ypts, zptsY, x, y)
+                yvecs[i].append(yvec)
                 results[i]['xflow'].append(xvec)
                 results[i]['yflow'].append(yvec)
                 slope = np.array((dx, dy)) # This is also the derivative
@@ -155,18 +179,42 @@ class HotFlux():
 
 
         import matplotlib.pyplot as plt
-        plt.plot(np.arange(200),[0]*200,color='k')
+        plt.figure(0)
+        plt.plot([0]*numPpts,color='k')
+        plt.title("Flux")
+        plt.figure(1)
+        plt.plot([0]*numPpts,color='k')
+        plt.title("X Flow")
+        plt.figure(2)
+        plt.plot([0]*numPpts,color='k')
+        plt.title("Y Flow")
+        plt.figure(3)
+        plt.plot([0]*numPpts,color='k')
+        plt.plot(xderiv)
+        plt.title("X Derivatives")
+        plt.figure(4)
+        plt.plot([0]*numPpts,color='k')
+        plt.plot(yderiv)
+        plt.title("Y Derivatives")
         for i,flx in enumerate(fluxVtime):
-            plt.plot(flx, label="%d" % (beg+i))
+            frameNum = "%d" % (beg+i)
+            plt.figure(0)
+            plt.plot(flx, label=frameNum)
+            plt.figure(1)
+            plt.plot(xvecs, label=frameNum)
+            plt.figure(2)
+            plt.plot(yvecs, label=frameNum)
             #print "Plot #%d" % (i)
             zero_crossings = np.where(np.diff(np.signbit(flx)))[0]
             #print "Zero Crossing Indices"
             #print "\t", zero_crossings
             #print "Physical Coordinates"
             for zero in zero_crossings:
+                slope = (flx[zero+1]-flx[zero-1]) / (samplePts[zero+1] - samplePts[zero-1])
+                print "\tFrame %d: %f -> (%f,%f) | slope = %f" % (beg+i, zero, pts[0,zero], pts[1,zero], slope)
                 results[zero]['hotspots'].append(beg+i)
-                #print "\t%f -> (%f,%f)" % (zero, pts[0,zero], pts[1,zero])
 
+        plt.figure(0)
         plt.legend()
         plt.show()
 
@@ -224,11 +272,6 @@ class HotFlux():
         ty = (y1 - y)/float(y1 - y0)
 
         return (z0-z1-z2+z3)*tx*ty+(z2-z3)*tx+(z1-z3)*ty+z3
-
-        #fx0 = zpts[0,0]*tx + zpts[0,1]*(1-tx)
-        #fx1 = zpts[1,0]*tx + zpts[1,1]*(1-tx)
-        #fx = fx0*ty + fx1*(1-ty)
-        #return fx
 
 
     def verifyData(self, knots, xtail, ytail):
