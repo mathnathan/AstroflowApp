@@ -179,6 +179,7 @@ class HotFlux():
 
 
         import matplotlib.pyplot as plt
+
         plt.figure(0)
         plt.plot([0]*numPpts,color='k')
         plt.title("Flux")
@@ -196,6 +197,8 @@ class HotFlux():
         plt.plot([0]*numPpts,color='k')
         plt.plot(yderiv)
         plt.title("Y Derivatives")
+        plt.figure(5)
+        plt.plot(pts[0], pts[1], label="Interpolant")
         for i,flx in enumerate(fluxVtime):
             frameNum = "%d" % (beg+i)
             plt.figure(0)
