@@ -85,7 +85,7 @@ class HotFlux():
         dzim, ydim, xdim = xtips.shape
         #y, x = np.mgrid[0:ydim, 0:xdim]
         knots = self.formatKnots(inKnots)
-        tck, u = interpolate.splprep([knots[:,0], knots[:,1]], s=0.0)
+        tck, u = interpolate.splprep([knots[:,0], knots[:,1]], s=1.25)
         samplePts = np.linspace(0,1,numPpts)
         pts = np.array(interpolate.splev(samplePts, tck, der=0))
         derivs = np.array(interpolate.splev(samplePts, tck, der=1))
@@ -190,14 +190,27 @@ class HotFlux():
         plt.plot([0]*numPpts,color='k')
         plt.title("Y Flow")
         plt.figure(3)
+        minXknt = knots.T[0].min()
+        maxXknt = knots.T[0].max()
+        for knt in knots.T[0]:
+            knt = (numPpts*(knt-minXknt))/(maxXknt-minXknt)
+            plt.plot([knt, knt], [np.min(xderiv), np.max(xderiv)], color='k', ls='dashed')
         plt.plot([0]*numPpts,color='k')
         plt.plot(xderiv)
         plt.title("X Derivatives")
         plt.figure(4)
+        minYknt = knots.T[1].min()
+        maxYknt = knots.T[1].max()
+        for knt in knots.T[1]:
+            knt = (numPpts*(knt-minYknt))/(maxYknt-minYknt)
+            plt.plot([knt, knt], [np.min(yderiv), np.max(yderiv)], color='k', ls='dashed')
         plt.plot([0]*numPpts,color='k')
         plt.plot(yderiv)
         plt.title("Y Derivatives")
         plt.figure(5)
+        plt.gca().set_aspect("equal")
+        plt.scatter(knots.T[0], knots.T[1], color='k')
+        plt.plot(knots.T[0], knots.T[1], color='k')
         plt.plot(pts[0], pts[1], label="Interpolant")
         for i,flx in enumerate(fluxVtime):
             frameNum = "%d" % (beg+i)
