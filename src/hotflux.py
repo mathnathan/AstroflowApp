@@ -1,6 +1,7 @@
 import numpy as np
 import cv2
 from scipy import interpolate
+from scipy.signal import argrelextrema
 from scipy.interpolate import interp2d as interpolate2d
 from scipy.interpolate import RectBivariateSpline
 from scipy.integrate import trapz, simps
@@ -28,6 +29,11 @@ class HotFlux():
         self.avgData = np.average(self.data, 0)
         self.shape = self.data.shape
         self.createFlow()
+
+        # Used for determining Hotspots
+        self.maxSlope = 0
+        self.maxAmplitude = 0
+        self.maxRepeats = 0
 
 
     def createFlow(self):
@@ -178,62 +184,155 @@ class HotFlux():
                 fluxVtime[j,i] = flowAlong
 
 
-        import matplotlib.pyplot as plt
 
-        plt.figure(0)
-        plt.plot([0]*numPpts,color='k')
-        plt.title("Flux")
-        plt.figure(1)
-        plt.plot([0]*numPpts,color='k')
-        plt.title("X Flow")
-        plt.figure(2)
-        plt.plot([0]*numPpts,color='k')
-        plt.title("Y Flow")
-        plt.figure(3)
-        minXknt = knots.T[0].min()
-        maxXknt = knots.T[0].max()
-        for knt in knots.T[0]:
-            knt = (numPpts*(knt-minXknt))/(maxXknt-minXknt)
-            plt.plot([knt, knt], [np.min(xderiv), np.max(xderiv)], color='k', ls='dashed')
-        plt.plot([0]*numPpts,color='k')
-        plt.plot(xderiv)
-        plt.title("X Derivatives")
-        plt.figure(4)
-        minYknt = knots.T[1].min()
-        maxYknt = knots.T[1].max()
-        for knt in knots.T[1]:
-            knt = (numPpts*(knt-minYknt))/(maxYknt-minYknt)
-            plt.plot([knt, knt], [np.min(yderiv), np.max(yderiv)], color='k', ls='dashed')
-        plt.plot([0]*numPpts,color='k')
-        plt.plot(yderiv)
-        plt.title("Y Derivatives")
-        plt.figure(5)
-        plt.gca().set_aspect("equal")
-        plt.scatter(knots.T[0], knots.T[1], color='k')
-        plt.plot(knots.T[0], knots.T[1], color='k')
-        plt.plot(pts[0], pts[1], label="Interpolant")
-        for i,flx in enumerate(fluxVtime):
-            frameNum = "%d" % (beg+i)
+        # Find hotspots
+        zeros_index = np.where(np.diff(np.signbit(fluxVtime), axis=1))
+        #print "zeros_index = ", zeros_index
+        args = np.argsort(zeros_index[1], kind='mergesort')  # Sort the zeros via spatial location, i.e. point along path
+        times = zeros_index[0][args] # When the hotspot occurred
+        locs = zeros_index[1][args] # Where the hotspot occurred
+        #print "times = ", times
+        #print "locs= ",locs
+        groups = np.split(times, np.where(np.diff(locs) != 0)[0]+1)
+        minimaLocs = argrelextrema(fluxVtime, np.less, axis=1)
+        maximaLocs = argrelextrema(fluxVtime, np.greater, axis=1)
+        allExtremaLocs = (np.concatenate((minimaLocs[0],maximaLocs[0])), np.concatenate((minimaLocs[1],maximaLocs[1])))
+        #print "allExtremaLocs = ", allExtremaLocs
+        # Each column of hotspots (below) looks like... [time, location, slope, repeats, amplitude, confidence]
+        hotspots = np.ndarray((6, zeros_index[0].size))
+        hotspots[0] = times  # Time hotspot occured (frame number)
+        hotspots[1] = locs # spatial location
+        hotspots[2] = (fluxVtime[times,locs+1]-fluxVtime[times,locs-1])/(samplePts[2]-samplePts[0])
+
+        maxSlope = np.abs(hotspots[2]).max()
+        self.maxSlope = maxSlope if maxSlope > self.maxSlope else self.maxSlope
+
+        itr = 0
+        #print "groups = ", groups
+        for group in groups:
+            #print "group = ", group
+            diff = np.abs(np.diff(group))
+            #print "np.abs(np.diff(group)) = ", diff
+            nonOne = diff != 1
+            #print "(abs(np.diff(group)) != 1) = ", nonOne
+            nonOneLocs = np.where(nonOne)[0]+1
+            #print "np.where(np.diff(group) != 1)[0]+1 = ", nonOneLocs
+            repeats = np.split(group, nonOneLocs)
+            #print "np.split(group, np.where(np.diff(group) != 1)[0]+1) = ", repeats
+            oneGroupFlag = True if len(repeats) == 1 else False
+            for sequence in repeats:
+                #print "\t\tsequence = ", sequence
+                sz = repeats[0].size if oneGroupFlag else sequence.size
+                self.maxRepeats = sz if sz > self.maxRepeats else self.maxRepeats
+                for time in sequence:
+                    #print "\t\t\t%d: size=%d" % (itr,sz)
+                    hotspots[3, itr] = sz - 1
+                    #print "\t\t\ttime = ", time
+                    extremaLocs = allExtremaLocs[1][np.where(allExtremaLocs[0] == time)] # extrema values
+                    #print "\t\t\textremaLocs = ", extremaLocs
+                    loc = hotspots[1,itr] # Location of THIS hotspot
+                    #print "\t\t\tthis loc = ", loc
+                    locsGreater = extremaLocs[np.where(extremaLocs > loc)]
+                    #print "\t\t\tlocs greater than this = ", locsGreater
+                    locsLess = extremaLocs[np.where(extremaLocs < loc)]
+                    #print "\t\t\tlocs less than this = ", locsLess
+                    minLocRight = np.min(locsGreater) if len(locsGreater) else -1
+                    #print "\t\t\tminLocRight = ", minLocRight
+                    rightExtrema = fluxVtime[time, minLocRight]
+                    #print "\t\t\trightExtrema = ", rightExtrema
+                    maxLocLeft = np.max(locsLess) if len(locsLess) else 0
+                    #print "\t\t\tmaxLocLeft = ", maxLocLeft
+                    leftExtrema = fluxVtime[time, maxLocLeft]
+                    #print "\t\t\tleftExtrema = ", leftExtrema
+                    amplitude = np.abs(rightExtrema-leftExtrema)
+                    #print "\t\t\tAMPLITUDE = ", amplitude
+                    hotspots[4, itr] = amplitude
+                    self.maxAmplitude = amplitude if amplitude > self.maxAmplitude else self.maxAmplitude
+                    itr += 1
+
+        # Now calculate the confidence for each hotspot
+        amplitudeScore = hotspots[4]/self.maxAmplitude
+        repeatScore = hotspots[3]/(self.maxRepeats-1) # Minus one because repeats are stored as size - 1(np.abs(hotspots[2])/maxSlope)
+        slopeScore = np.abs(hotspots[2])/self.maxSlope
+        #hotspots[5] = 0.4*amplitudeScore+0.4*repeatScore+0.2*slopeScore
+        hotspots[5] = 0.5*amplitudeScore+0.3*repeatScore+0.2*slopeScore
+        if 0:
+            hotspots = hotspots[:,np.argsort(hotspots[0],kind='mergesort')]
+            for hs in hotspots.T:
+                if hs[2] > 100: print "\n*************************************\n"
+                print "Frame: ", beg+int(hs[0])
+                print "\tLocation: %d -> (%f,%f)" % (int(hs[1]), pts[0,int(hs[1])], pts[1,int(hs[1])])
+                print "\tSlope: %f, score: %f" % (hs[2], hs[2]/self.maxSlope)
+                print "\tRepeats: %d, score: %f" % (int(hs[3]), hs[3]/(self.maxRepeats-1))
+                print "\tAmplitude: %f, score: %f" % (hs[4], hs[4]/self.maxAmplitude)
+                print "\tConfidence: ", hs[5]
+
+            print "\n\n"
+            highConf = hotspots[:,np.where(hotspots[5]>.5)[0]]
+            for hs in highConf.T:
+                print "Frame: ", beg+int(hs[0])
+                print "\tLocation: %d -> (%f,%f)" % (int(hs[1]), pts[0,int(hs[1])], pts[1,int(hs[1])])
+                print "\tSlope: %f, score: %f" % (hs[2], hs[2]/self.maxSlope)
+                print "\tRepeats: %d, score: %f" % (int(hs[3]), hs[3]/(self.maxRepeats-1))
+                print "\tAmplitude: %f, score: %f" % (hs[4], hs[4]/self.maxAmplitude)
+                print "\tConfidence: ", hs[5]
+
+
+            print "Max Slope = ", self.maxSlope
+            print "Max Repeats = ", self.maxRepeats
+            print "Max Amplitude = ", self.maxAmplitude
+
+        if 0:
+            #import matplotlib.pyplot as plt
+
             plt.figure(0)
-            plt.plot(flx, label=frameNum)
+            plt.plot([0]*numPpts,color='k')
+            plt.title("Flux")
             plt.figure(1)
-            plt.plot(xvecs, label=frameNum)
+            plt.plot([0]*numPpts,color='k')
+            plt.title("X Flow")
             plt.figure(2)
-            plt.plot(yvecs, label=frameNum)
-            #print "Plot #%d" % (i)
-            zero_crossings = np.where(np.diff(np.signbit(flx)))[0]
-            #print "Zero Crossing Indices"
-            #print "\t", zero_crossings
-            #print "Physical Coordinates"
-            for zero in zero_crossings:
-                slope = (flx[zero+1]-flx[zero-1]) / (samplePts[zero+1] - samplePts[zero-1])
-                print "\tFrame %d: %f -> (%f,%f) | slope = %f" % (beg+i, zero, pts[0,zero], pts[1,zero], slope)
-                results[zero]['hotspots'].append(beg+i)
+            plt.plot([0]*numPpts,color='k')
+            plt.title("Y Flow")
+            plt.figure(3)
+            minXknt = knots.T[0].min()
+            maxXknt = knots.T[0].max()
+            for knt in knots.T[0]:
+                knt = (numPpts*(knt-minXknt))/(maxXknt-minXknt)
+                plt.plot([knt, knt], [np.min(xderiv), np.max(xderiv)], color='k', ls='dashed')
+            plt.plot([0]*numPpts,color='k')
+            plt.plot(xderiv)
+            plt.title("X Derivatives")
+            plt.figure(4)
+            minYknt = knots.T[1].min()
+            maxYknt = knots.T[1].max()
+            for knt in knots.T[1]:
+                knt = (numPpts*(knt-minYknt))/(maxYknt-minYknt)
+                plt.plot([knt, knt], [np.min(yderiv), np.max(yderiv)], color='k', ls='dashed')
+            plt.plot([0]*numPpts,color='k')
+            plt.plot(yderiv)
+            plt.title("Y Derivatives")
+            plt.figure(5)
+            plt.gca().set_aspect("equal")
+            plt.scatter(knots.T[0], knots.T[1], color='k')
+            plt.plot(knots.T[0], knots.T[1], color='k')
+            plt.plot(pts[0], pts[1], label="Interpolant")
 
-        plt.figure(0)
-        plt.legend()
-        plt.show()
 
+            for i,flx in enumerate(fluxVtime):
+                frameNum = beg+i
+                plt.figure(0)
+                plt.plot(flx, label=frameNum)
+                plt.figure(1)
+                plt.plot(xvecs, label=frameNum)
+                plt.figure(2)
+                plt.plot(yvecs, label=frameNum)
+
+            plt.figure(0)
+            plt.legend()
+            #plt.show()
+
+        hotspots[0] += beg
         return results
 
 

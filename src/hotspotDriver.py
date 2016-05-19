@@ -9,9 +9,13 @@ path = [xpts, ypts]
 
 import hotflux as hf
 import sys
+import time
 
 analyzer = hf.HotFlux(sys.argv[-1])
 
-r = analyzer.findHotspots(path, beg=191, end=196)
+start = time.clock()
+r = analyzer.findHotspots(path, beg=0, end=500)
+stop = time.clock()
+print "took %f seconds" % (stop-start)
 #print "r = ", r
 
