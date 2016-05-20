@@ -8,7 +8,7 @@ from scipy.integrate import trapz, simps
 from scipy.ndimage.filters import gaussian_filter as gauss
 import readWrite as rw
 import sys, os
-from tqdm import tqdm  # time loops
+#from tqdm import tqdm  # time loops
 
 
 class HotFlux():
@@ -99,7 +99,7 @@ class HotFlux():
 
         numFrames = xtips.shape[0]
         fluxVtime = np.ndarray((numFrames, numPpts))
-        results = []
+        #results = []
         flowVecs = zip(xtips, ytips)
         hotspots = []
 
@@ -107,9 +107,9 @@ class HotFlux():
         xderiv = []; yderiv = []
         for i,((x,y),(dx,dy)) in enumerate(zip(pts.T,derivs.T)):
             xvecs.append([]), yvecs.append([]);
-            results.append({'x': x, 'y': y, 'dx': dx, 'dy': dy,
-                            'xflow': [], 'yflow': [], 'flowVtime': [],
-                            'hotspots': []})
+            #results.append({'x': x, 'y': y, 'dx': dx, 'dy': dy,
+                            #'xflow': [], 'yflow': [], 'flowVtime': [],
+                            #'hotspots': []})
             xderiv.append(dx)
             yderiv.append(dy)
             for j,(xtip, ytip) in enumerate(flowVecs):  # For each frame
@@ -175,12 +175,12 @@ class HotFlux():
                 xvecs[i].append(xvec)
                 yvec = self.bilinearInterp(xpts, ypts, zptsY, x, y)
                 yvecs[i].append(yvec)
-                results[i]['xflow'].append(xvec)
-                results[i]['yflow'].append(yvec)
+                #results[i]['xflow'].append(xvec)
+                #results[i]['yflow'].append(yvec)
                 slope = np.array((dx, dy)) # This is also the derivative
                 flow = np.array((xvec, yvec))
                 flowAlong = np.dot(flow, slope)
-                results[i]['flowVtime'].append(flowAlong)
+                #results[i]['flowVtime'].append(flowAlong)
                 fluxVtime[j,i] = flowAlong
 
 
@@ -252,10 +252,11 @@ class HotFlux():
 
         # Now calculate the confidence for each hotspot
         amplitudeScore = hotspots[4]/self.maxAmplitude
-        repeatScore = hotspots[3]/(self.maxRepeats-1) # Minus one because repeats are stored as size - 1(np.abs(hotspots[2])/maxSlope)
+        # Minus one because repeats are stored as size - 1
+        repeatScore = hotspots[3]/(self.maxRepeats-1) if self.maxRepeats > 1 else hotspots[3]
         slopeScore = np.abs(hotspots[2])/self.maxSlope
         #hotspots[5] = 0.4*amplitudeScore+0.4*repeatScore+0.2*slopeScore
-        hotspots[5] = 0.5*amplitudeScore+0.3*repeatScore+0.2*slopeScore
+        hotspots[5] = 0.45*amplitudeScore+0.35*repeatScore+0.2*slopeScore
         if 0:
             hotspots = hotspots[:,np.argsort(hotspots[0],kind='mergesort')]
             for hs in hotspots.T:
@@ -333,7 +334,8 @@ class HotFlux():
             #plt.show()
 
         hotspots[0] += beg
-        return results
+        #return {"hotspots": hotspots.tolist(), "pathPts": pts.tolist(), "xflow": xvecs.tolist(), "yflow": yvecs.tolist()}
+        return (hotspots.tolist(), pts.tolist(), xvecs, yvecs)
 
 
     def calcCentroid(self, array=None):
@@ -432,7 +434,7 @@ class HotFlux():
 
     #----------------------------------------------------------------------
     #----------------------------------------------------------------------
-    def calcFluxLinearTEST(self, inKnots, calDataIn=None, xtailIn=None, ytailIn=None, xtipsIn=None, ytipsIn=None, width=1, beg=0, end=-1):
+    def calcFlux(self, inKnots, calDataIn=None, xtailIn=None, ytailIn=None, xtipsIn=None, ytipsIn=None, width=1, beg=0, end=-1):
         """
         Calculate the flux of a path specified by knot points over a series of
         vector vields determined by xtips and ytips. For subpixel accuracy, the
@@ -506,7 +508,7 @@ class HotFlux():
 
         dzim, ydim, xdim = xtips.shape
         numFrames = xtips.shape[0]
-        numKnots = 1000 # Number of times to sample along the interpolant
+        numKnots = 500 # Number of times to sample along the interpolant
 
         avgImg = self.avgData
         center = self.calcCentroid(avgImg) # The centroid of the calcium image!
@@ -544,7 +546,7 @@ class HotFlux():
         xvecs = []
         yvecs = []
 
-        # Rename point and velocity asrrays
+        # Rename point and velocity arrays
         # 2D points
         x, y = xtail, ytail
         #print x[0,:]
@@ -572,7 +574,7 @@ class HotFlux():
         # DEBUGGING
         # Create a dataset with vx,vy = (1,0)
         # Knots all pointed in the x direction
-        debug = True
+        debug = False
         if debug:
             vx[:] = 0
             vy[:] = 1
@@ -605,7 +607,7 @@ class HotFlux():
 
         # Loop through all frames
         for iframe in xrange(nb_frames):
-            print "frame ", iframe
+            #print "frame ", iframe
             cca, vvx, vvy = ca[iframe], vx[iframe], vy[iframe]
 
             vx_interp_func = RectBivariateSpline(y1d, x1d, vvx, kx=1, ky=1)  # 1D interpolation
@@ -649,10 +651,10 @@ class HotFlux():
 
         # Nathan: fix the remainder
         derivs = np.diff(knots.T,1,1)
-        results = {'flux': fluxPts.tolist(), 'dx': derivs[0].tolist(), 'dy': derivs[1].tolist()}
+        #results = {'flux': fluxPts.tolist(), 'dx': derivs[0].tolist(), 'dy': derivs[1].tolist()}
 
         print "exit calcFluxLinear"
-        return results
+        return (fluxPts.tolist(), derivs[0].tolist(), derivs[1].tolist())
     #----------------------------------------------------------------------
     #----------------------------------------------------------------------
     def calcFluxLinear(self, inKnots, calDataIn=None, xtailIn=None, ytailIn=None, xtipsIn=None, ytipsIn=None, width=1, beg=0, end=-1):

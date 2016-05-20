@@ -71,8 +71,9 @@ def calcFlux():
     else:
         start, stop = getBounds(jsonData)
 
-    results = analyzer.calcFluxLinear(path, beg=start, end=stop)
-    return json.jsonify({"results": results})
+    #results = {'flux': fluxPts.tolist(), 'dx': derivs[0].tolist(), 'dy': derivs[1].tolist()}
+    (flux, dx, dy) = analyzer.calcFlux(path, beg=start, end=stop)
+    return json.jsonify({"flux": flux, "dx": dx, "dy": dy})
 
 
 @app.route('/findHotspots', methods=['POST'])
@@ -91,8 +92,8 @@ def findHotspots():
     else:
         start, stop = getBounds(jsonData)
 
-    results = analyzer.findHotspots(path, beg=start, end=stop)
-    return json.jsonify({'results': results})
+    (hotspots, pathPts, xflow, yflow) = analyzer.findHotspots(path, beg=start, end=stop)
+    return json.jsonify({'hotspots': hotspots, 'pathPts': pathPts, 'xflow': xflow, 'yflow': yflow})
 
 def getBounds(request):
     start = 0; stop = -1
